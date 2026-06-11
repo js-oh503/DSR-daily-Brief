@@ -485,16 +485,22 @@ def _ordered_cats(grouped: dict, order: list) -> list:
     return ordered + rest
 
 
+def _sec_id(cat: str) -> str:
+    """섹션 앵커 id — 알파벳·숫자·한글만 남김."""
+    return "sec-" + re.sub(r"[^\w가-힣]", "", cat)
+
+
 def make_sections(grouped: dict, is_comp: bool = False) -> str:
     comp_cls = " comp" if is_comp else ""
     html = ""
     cats = _ordered_cats(grouped, SECTION_ORDER) if not is_comp else sorted(grouped.keys())
     for cat in cats:
         items = grouped[cat]
-        icon = cat.split()[0] if cat else ""
-        name = cat[len(icon):].strip() if icon else cat
+        icon  = cat.split()[0] if cat else ""
+        name  = cat[len(icon):].strip() if icon else cat
+        sid   = _sec_id(cat)
         html += f"""
-      <div class="section-header{comp_cls}">
+      <div class="section-header{comp_cls}" id="{sid}">
         <span class="section-icon">{icon}</span>
         <span class="section-name">{name}</span>
         <span class="section-cnt">{len(items)}</span>
@@ -524,10 +530,21 @@ def build_html(articles: list[dict], output_dir: Path) -> Path:
     dsr_sections  = make_sections(dsr_grouped, is_comp=False)
     comp_sections = make_sections(comp_grouped, is_comp=True)
 
-    # 필터 칩 (탭바 아래)
+    # 필터 칩 — SECTION_ORDER 순서 + 클릭 시 해당 섹션으로 스크롤
     def chips(grouped, is_comp=False):
-        cls = " comp" if is_comp else ""
-        return "".join(f'<span class="chip{cls}">{cat} <strong>{len(v)}</strong></span>' for cat, v in sorted(grouped.items()))
+        cls  = " comp" if is_comp else ""
+        cats = _ordered_cats(grouped, SECTION_ORDER) if not is_comp else sorted(grouped.keys())
+        parts = []
+        for cat in cats:
+            sid  = _sec_id(cat)
+            icon = cat.split()[0] if cat else ""
+            name = cat[len(icon):].strip() if icon else cat
+            cnt  = len(grouped[cat])
+            parts.append(
+                f'<span class="chip{cls}" onclick="scrollTo(\'{sid}\')">'
+                f'{icon} {name} <strong>{cnt}</strong></span>'
+            )
+        return "".join(parts)
 
     dsr_badges  = chips(dsr_grouped)  or '<span style="color:#aaa;font-size:.8rem">수집된 기사 없음</span>'
     comp_badges = chips(comp_grouped, is_comp=True) or '<span style="color:#aaa;font-size:.8rem">수집된 기사 없음</span>'
@@ -619,8 +636,19 @@ def build_html(articles: list[dict], output_dir: Path) -> Path:
                      text-transform: uppercase; letter-spacing: .6px; margin-right: 4px; }}
     .chip {{ font-size: 0.75rem; font-weight: 600; border-radius: 20px;
               padding: 4px 13px; background: var(--blue-lt); color: var(--blue);
-              transition: all .15s; }}
+              transition: all .18s; cursor: pointer; user-select: none; }}
+    .chip:hover {{ background: var(--blue); color: #fff; transform: translateY(-1px);
+                   box-shadow: 0 2px 8px rgba(21,101,192,.25); }}
+    .chip:active {{ transform: translateY(0); }}
     .chip.comp {{ background: var(--red-lt); color: var(--red); }}
+    .chip.comp:hover {{ background: var(--red); color: #fff;
+                        box-shadow: 0 2px 8px rgba(183,28,28,.25); }}
+    /* 클릭된 섹션 헤더 잠깐 강조 */
+    .section-header.highlight {{ animation: hl .8s ease; }}
+    @keyframes hl {{
+      0%   {{ background: rgba(21,101,192,.12); border-radius: 8px; }}
+      100% {{ background: transparent; }}
+    }}
 
     /* ── 페이지 래퍼 ── */
     .page {{ max-width: 1160px; margin: 0 auto; padding: 28px 24px 56px; }}
@@ -782,6 +810,20 @@ def build_html(articles: list[dict], output_dir: Path) -> Path:
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     document.getElementById('tab-' + name).classList.add('active');
     document.getElementById('panel-' + name).classList.add('active');
+  }}
+
+  function scrollTo(id) {{
+    const el = document.getElementById(id);
+    if (!el) return;
+    // 고정 헤더(topbar 64px + tab-nav 50px + filter-bar ~44px) 높이만큼 오프셋
+    const offset = 64 + 50 + 44 + 12;
+    const top = el.getBoundingClientRect().top + window.scrollY - offset;
+    window.scrollTo({{ top, behavior: 'smooth' }});
+    // 도착 후 잠깐 강조
+    setTimeout(() => {{
+      el.classList.add('highlight');
+      setTimeout(() => el.classList.remove('highlight'), 850);
+    }}, 400);
   }}
   </script>
 </body>
