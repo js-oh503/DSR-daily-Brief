@@ -6,13 +6,35 @@ Claude API 없이 동작합니다.
 
 import sys
 import json
+import logging
 import urllib.request
 import urllib.parse
+import urllib.error
 import feedparser
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import webbrowser
 import re
+
+# ──────────────────────────────────────────────
+# 로깅 설정 — 콘솔(INFO) + 파일(DEBUG) 동시 출력
+# ──────────────────────────────────────────────
+LOG_PATH = Path(__file__).parent / "logs" / f"dsr_{datetime.now().strftime('%Y%m%d')}.log"
+LOG_PATH.parent.mkdir(exist_ok=True)
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%H:%M:%S",
+    handlers=[
+        logging.FileHandler(LOG_PATH, encoding="utf-8-sig"), # 파일: DEBUG 이상 전부 (BOM 포함, 메모장 호환)
+        logging.StreamHandler(sys.stdout),                  # 콘솔: INFO 이상만
+    ],
+)
+# 콘솔 핸들러만 INFO로 제한
+logging.getLogger().handlers[1].setLevel(logging.INFO)
+
+log = logging.getLogger("dsr")
 
 # ──────────────────────────────────────────────
 # 한국어 번역 (Python 서버사이드, 무료)
@@ -21,28 +43,44 @@ def translate_ko(text: str) -> str:
     """영문 텍스트를 한국어로 번역. 실패 시 원문 반환."""
     if not text or not text.strip():
         return text
-    # 이미 한글이 포함된 경우 번역 생략
-    if re.search(r"[가-힣]", text):
+    if re.search(r"[가-힣]", text):   # 이미 한글 포함 → 생략
         return text
     try:
         url = ("https://translate.googleapis.com/translate_a/single"
                "?client=gtx&sl=en&tl=ko&dt=t&q=" + urllib.parse.quote(text))
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=6) as res:
+        with urllib.request.urlopen(req, timeout=8) as res:
             data = json.loads(res.read())
             return "".join(seg[0] for seg in data[0] if seg[0])
-    except Exception:
+    except urllib.error.URLError as e:
+        log.warning("번역 네트워크 오류 (원문 유지): %s | 텍스트: %.40s", e.reason, text)
+        return text
+    except (KeyError, IndexError, json.JSONDecodeError) as e:
+        log.warning("번역 응답 파싱 오류 (원문 유지): %s | 텍스트: %.40s", e, text)
+        return text
+    except Exception as e:
+        log.warning("번역 알 수 없는 오류 (원문 유지): %s | 텍스트: %.40s", e, text)
         return text
 
 
 def translate_articles(articles: list[dict]) -> list[dict]:
     """수집된 기사의 제목·요약을 한국어로 번역."""
-    total = len(articles)
+    total   = len(articles)
+    failed  = 0
     for i, a in enumerate(articles, 1):
         print(f"  번역 중 ({i}/{total}): {a['title'][:40]}...", end="\r", flush=True)
+        orig_title   = a["title"]
+        orig_summary = a["summary"]
         a["title"]   = translate_ko(a["title"])
         a["summary"] = translate_ko(a["summary"])
-    print(" " * 70, end="\r")  # 진행 줄 지우기
+        if a["title"] == orig_title:        # 번역 안 된 경우
+            failed += 1
+            log.debug("번역 실패 (원문 유지): %s", orig_title[:60])
+    print(" " * 70, end="\r")
+    if failed:
+        log.warning("번역 실패 %d건 / 전체 %d건 — 해당 기사는 원문으로 저장됨", failed, total)
+    else:
+        log.info("번역 완료 %d건", total)
     return articles
 
 # ──────────────────────────────────────────────
@@ -248,43 +286,64 @@ def fetch_articles(hours: int = 24) -> list[dict]:
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
     articles = []
 
+    feed_ok = feed_fail = 0
     for feed_info in RSS_FEEDS:
-        print(f"  수집 중: {feed_info['name']} ...", end=" ", flush=True)
+        name = feed_info["name"]
+        print(f"  수집 중: {name} ...", end=" ", flush=True)
         try:
-            feed = feedparser.parse(feed_info["url"])
+            feed = feedparser.parse(feed_info["url"], request_headers={"User-Agent": "Mozilla/5.0"})
+
+            # feedparser는 네트워크 오류도 예외 없이 반환 → status/bozo로 확인
+            if getattr(feed, "bozo", False) and not feed.entries:
+                raise ValueError(feed.bozo_exception)
+
             count = 0
             for entry in feed.entries:
-                published = None
-                if hasattr(entry, "published_parsed") and entry.published_parsed:
-                    published = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
-                elif hasattr(entry, "updated_parsed") and entry.updated_parsed:
-                    published = datetime(*entry.updated_parsed[:6], tzinfo=timezone.utc)
+                try:
+                    published = None
+                    if hasattr(entry, "published_parsed") and entry.published_parsed:
+                        published = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
+                    elif hasattr(entry, "updated_parsed") and entry.updated_parsed:
+                        published = datetime(*entry.updated_parsed[:6], tzinfo=timezone.utc)
 
-                if published and published < cutoff:
-                    continue
+                    if published and published < cutoff:
+                        continue
 
-                title   = getattr(entry, "title", "").strip()
-                summary = strip_html(getattr(entry, "summary", ""))[:400]
-                link    = getattr(entry, "link", "")
+                    title   = getattr(entry, "title", "").strip()
+                    summary = strip_html(getattr(entry, "summary", ""))[:400]
+                    link    = getattr(entry, "link", "")
 
-                if not title or not is_relevant(title, summary):
-                    continue
+                    if not title or not is_relevant(title, summary):
+                        continue
 
-                comp = is_competitor(title, summary)
-                articles.append({
-                    "source":      feed_info["name"],
-                    "title":       title,
-                    "summary":     summary,
-                    "link":        link,
-                    "published":   published.strftime("%Y-%m-%d %H:%M UTC") if published else "시각 불명",
-                    "category":    get_competitor_category(title, summary) if comp else get_category(title, summary),
-                    "is_competitor": comp,
-                })
-                count += 1
+                    comp = is_competitor(title, summary)
+                    articles.append({
+                        "source":        name,
+                        "title":         title,
+                        "summary":       summary,
+                        "link":          link,
+                        "published":     published.strftime("%Y-%m-%d %H:%M UTC") if published else "시각 불명",
+                        "category":      get_competitor_category(title, summary) if comp else get_category(title, summary),
+                        "is_competitor": comp,
+                    })
+                    count += 1
+                except Exception as entry_err:
+                    log.debug("[%s] 항목 파싱 오류 (건너뜀): %s", name, entry_err)
 
             print(f"OK {count}건")
+            log.debug("[%s] %d건 수집", name, count)
+            feed_ok += 1
+
+        except ValueError as e:
+            print(f"FAIL (피드 파싱 오류)")
+            log.warning("[%s] 피드 파싱 오류: %s", name, e)
+            feed_fail += 1
         except Exception as e:
-            print(f"FAIL 오류: {e}")
+            print(f"FAIL (오류: {type(e).__name__})")
+            log.error("[%s] 수집 실패: %s", name, e, exc_info=True)
+            feed_fail += 1
+
+    log.info("피드 수집 완료 — 성공 %d / 실패 %d", feed_ok, feed_fail)
 
     # 완전 일치 + 유사 중복 제거 (#4)
     def title_words(title: str) -> set:
@@ -857,9 +916,19 @@ def main():
 
     print("\n브라우저에서 보고서를 엽니다...")
     webbrowser.open(report_path.as_uri())
-    print("\n[완료]")
+    log.info("실행 완료 — 보고서: %s", report_path)
+    print(f"\n[완료]  로그: {LOG_PATH}")
     print("=" * 55)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        log.info("사용자가 실행을 중단했습니다.")
+        sys.exit(0)
+    except Exception as e:
+        log.critical("프로그램 비정상 종료: %s", e, exc_info=True)
+        print(f"\n[오류] 프로그램이 비정상 종료됐습니다.")
+        print(f"  로그 파일: {LOG_PATH}")
+        sys.exit(1)
