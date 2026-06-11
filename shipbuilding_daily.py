@@ -339,11 +339,17 @@ def action_recommendation(a: dict) -> str:
 # ──────────────────────────────────────────────
 # HTML 보고서 생성
 # ──────────────────────────────────────────────
+def _domain(url: str) -> str:
+    m = re.search(r"https?://(?:www\.)?([^/]+)", url)
+    return m.group(1) if m else url
+
+
 def _card_html(a: dict, rank: int = 0, is_comp: bool = False) -> str:
-    comp_cls = " comp" if is_comp else ""
+    comp_cls   = " comp" if is_comp else ""
     rank_badge = f'<span class="rank-badge">#{rank}</span>' if rank else ""
-    rel  = dsr_relevance(a)
-    act  = action_recommendation(a)
+    rel        = dsr_relevance(a)
+    act        = action_recommendation(a)
+    domain     = _domain(a["link"])
     comp_insights = f"""
         <div class="insight-row">
           <div class="insight act"><span class="ilabel">대응 방안</span><span class="itext">{act}</span></div>
@@ -363,6 +369,10 @@ def _card_html(a: dict, rank: int = 0, is_comp: bool = False) -> str:
         <div class="insight-row">
           <div class="insight rel"><span class="ilabel">DSR 연관</span><span class="itext">{rel}</span></div>
         </div>{comp_insights}
+      </div>
+      <div class="card-source-row">
+        <span class="src-label">출처</span>
+        <a class="src-link" href="{a['link']}" target="_blank">{domain}</a>
       </div>
     </div>"""
 
@@ -622,6 +632,24 @@ def build_html(articles: list[dict], output_dir: Path) -> Path:
     .insight.act .ilabel {{ color: var(--green); }}
     .card.comp .insight.rel .ilabel {{ color: var(--red); }}
     .itext {{ font-size: 0.78rem; font-weight: 500; line-height: 1.5; color: var(--text); }}
+
+    /* ── 카드 출처 행 ── */
+    .card-source-row {{
+      display: flex; align-items: center; gap: 6px;
+      margin-top: 8px; padding-top: 8px;
+      border-top: 1px dashed var(--gray-bdr);
+    }}
+    .src-label {{
+      font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .5px; color: var(--gray-text);
+      background: var(--gray-bg); border-radius: 4px; padding: 1px 6px;
+    }}
+    .src-link {{
+      font-size: 0.72rem; color: var(--gray-text); text-decoration: none;
+      word-break: break-all;
+    }}
+    .src-link:hover {{ color: var(--blue); text-decoration: underline; }}
+    .card.comp .src-link:hover {{ color: var(--red); }}
 
     /* ── 빈 상태 ── */
     .empty {{ text-align: center; padding: 64px 20px; color: var(--gray-text); }}
