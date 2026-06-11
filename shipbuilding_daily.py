@@ -27,6 +27,10 @@ RSS_FEEDS = [
     {"name": "4C Offshore",             "url": "https://www.4coffshore.com/rss/news.xml"},
     {"name": "Recharge News",           "url": "https://www.rechargenews.com/rss"},
     {"name": "Wind Energy Update",      "url": "https://www.windenergyupdate.com/rss.xml"},
+    # 조선·해운 (국내외 조선소 동향)
+    {"name": "Korea Shipping Gazette",  "url": "https://www.ksg.co.kr/rss/rss.xml"},
+    {"name": "ShipandBunker",           "url": "https://shipandbunker.com/news/rss"},
+    {"name": "TradeWinds",              "url": "https://www.tradewindsnews.com/rss"},
     # 항만·크레인 (하역 장비 수요처)
     {"name": "Port Technology",         "url": "https://www.porttechnology.org/feed/"},
     # 광산·중공업 (산업용 와이어로프 수요처)
@@ -72,6 +76,23 @@ CATEGORIES = {
         "offshore crane", "subsea lifting", "heavy lift",
         "hoist", "winch", "capstan", "drawworks",
         "load line", "running rigging", "standing rigging",
+    ],
+    "🚢 조선·조선소": [
+        # 국내 조선소
+        "현대중공업", "삼성중공업", "한화오션", "대우조선해양",
+        "HD현대", "현대미포조선", "현대삼호중공업",
+        "STX조선", "한진중공업", "케이조선", "HJ중공업",
+        # 글로벌 조선소
+        "shipbuilding", "shipyard", "drydock", "dry dock",
+        "newbuild", "new build", "vessel order", "ship order",
+        "keel laying", "launch ceremony", "delivery",
+        # 선종 (와이어로프 수요와 연결)
+        "bulk carrier", "container ship", "LNG carrier",
+        "tanker", "VLCC", "cruise ship", "car carrier", "PCTC",
+        "naval vessel", "offshore support vessel", "OSV",
+        # 조선 기자재
+        "marine equipment", "ship equipment", "outfitting",
+        "mooring equipment", "deck equipment", "winch system",
     ],
     "🌬️ 해상풍력": [
         "offshore wind", "offshore wind farm", "offshore wind turbine",
@@ -258,8 +279,9 @@ def fetch_articles(hours: int = 24) -> list[dict]:
 # ──────────────────────────────────────────────
 _CAT_SCORE = {
     "DSR 자사": 10, "와이어로프": 5, "섬유로프": 5,
-    "계류":     4,  "해상풍력":  4,  "크레인":   3,
-    "오프쇼어": 3,  "광산":     3,  "시장":     2,  "규정": 1,
+    "계류":     4,  "해상풍력":  4,  "조선":     4,
+    "크레인":   3,  "오프쇼어": 3,  "광산":     3,
+    "시장":     2,  "규정":     1,
 }
 
 def score_article(a: dict) -> int:
@@ -278,6 +300,8 @@ def dsr_relevance(a: dict) -> str:
         return "DSR 주력 제품인 와이어로프·강선 시장과 직접 연관"
     if "섬유로프" in cat:
         return "DSR 섬유로프(SuperMax 등) 제품군 시장·기술 동향과 연관"
+    if "조선" in cat:
+        return "조선소는 DSR 크레인 와이어로프·계류 로프·리깅 등 선박 건조·의장 단계의 주요 수요처"
     if "해상풍력" in cat:
         return "해상풍력 설치·계류는 DSR 와이어로프·섬유로프(FOWT 계류·앵커)·강선의 핵심 신성장 시장"
     if "계류" in cat:
@@ -312,6 +336,10 @@ def action_recommendation(a: dict) -> str:
     if "섬유로프" in cat:
         if pos:  return "🟢 기회 — 섬유로프 영업팀 리드 확인, 수주 가능성 검토"
         return "📌 모니터링 — 섬유로프 사업부 공유 및 시장 동향 파악"
+    if "조선" in cat:
+        if pos:  return "🟢 기회 — 신조 수주 확대 → 조선소 크레인 와이어·의장 로프 수요 증가, 영업팀 즉시 공유"
+        if neg:  return "🟡 주의 — 조선 경기 위축 신호, 수요 감소 가능성 모니터링"
+        return "📌 모니터링 — 국내외 조선소 수주·생산 동향 파악, 영업팀 공유"
     if "해상풍력" in cat:
         if pos:  return "🟢 기회 — FOWT 계류·앵커링·설치선 와이어 납품 기회 검토, 프로젝트 리스트 확인"
         return "📌 모니터링 — 해상풍력 프로젝트 동향 파악, 영업·기획팀 공유"
