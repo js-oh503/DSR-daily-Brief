@@ -238,28 +238,153 @@ def fetch_articles(hours: int = 24) -> list[dict]:
 
 
 # ──────────────────────────────────────────────
+# DSR 중심 분석 헬퍼
+# ──────────────────────────────────────────────
+_CAT_SCORE = {
+    "DSR 자사": 10, "와이어로프": 5, "섬유로프": 5,
+    "계류":     4,  "크레인":   3,  "오프쇼어": 3,
+    "광산":     3,  "시장":     2,  "규정":     1,
+}
+
+def score_article(a: dict) -> int:
+    cat = a["category"]
+    for k, v in _CAT_SCORE.items():
+        if k in cat:
+            return v
+    return 1
+
+
+def dsr_relevance(a: dict) -> str:
+    cat = a["category"]
+    if "DSR 자사" in cat:
+        return "자사 제품이 직접 언급된 기사 — 즉시 내용 확인 필요"
+    if "와이어로프" in cat:
+        return "DSR 주력 제품인 와이어로프·강선 시장과 직접 연관"
+    if "섬유로프" in cat:
+        return "DSR 섬유로프(SuperMax 등) 제품군 시장·기술 동향과 연관"
+    if "계류" in cat:
+        return "계류 로프·앵커링 시스템 주요 수요처 동향 — 납품 시장에 영향"
+    if "크레인" in cat:
+        return "크레인용 와이어로프 수요처 동향 — 산업 수요 예측에 활용"
+    if "오프쇼어" in cat:
+        return "오프쇼어 산업은 DSR 계류·앵커링·드릴링 로프의 핵심 수요처"
+    if "광산" in cat:
+        return "광산용 와이어로프(샤프트 로프·드래그라인 등) 수요처 동향"
+    if "시장" in cat:
+        return "원자재(와이어 로드·폴리에스터) 가격 변동 — DSR 생산 원가에 직접 영향"
+    if "규정" in cat:
+        return "로프 국제 규정·인증 변경 — 제품 품질 기준·납품 요건에 영향"
+    return "와이어로프·섬유로프 업계 동향으로 DSR 사업 전반과 연관"
+
+
+def action_recommendation(a: dict) -> str:
+    cat  = a["category"]
+    text = (a["title"] + " " + a["summary"]).lower()
+    pos  = any(w in text for w in ["order","contract","award","new project","expand","growth","demand","install","launch","record"])
+    neg  = any(w in text for w in ["accident","failure","recall","ban","shortage","delay","cancel","incident"])
+    up   = any(w in text for w in ["surge","rise","increase","soar","high","record high"])
+    down = any(w in text for w in ["fall","drop","decline","low","decrease","slump"])
+
+    if "DSR 자사" in cat:
+        return "🔴 즉시 대응 — 마케팅·영업팀 내용 공유 및 모니터링 강화"
+    if "와이어로프" in cat:
+        if pos:  return "🟢 기회 — 영업팀에 수요 확대 신호 공유, 신규 수주 검토"
+        if neg:  return "🟡 리스크 — 시장 위축 원인 분석, 영업 전략 재검토"
+        return "📌 모니터링 — 기술·영업팀 공유, 제품 경쟁력 점검"
+    if "섬유로프" in cat:
+        if pos:  return "🟢 기회 — 섬유로프 영업팀 리드 확인, 수주 가능성 검토"
+        return "📌 모니터링 — 섬유로프 사업부 공유 및 시장 동향 파악"
+    if "계류" in cat:
+        if pos:  return "🟢 기회 — 프로젝트 수주 가능성 검토, 영업팀 즉시 공유"
+        return "📌 모니터링 — 계류 관련 영업팀 공유, 납품 기회 탐색"
+    if "크레인" in cat:
+        if pos:  return "🟢 기회 — 산업용 와이어로프 납품 기회 영업팀 검토"
+        return "📌 모니터링 — 산업 수요 변화 파악, 영업팀 공유"
+    if "오프쇼어" in cat:
+        if pos:  return "🟢 기회 — 계류·앵커링 제품 수주 기회 적극 검토"
+        return "📌 모니터링 — 오프쇼어 수요 변화 추적, 영업팀 공유"
+    if "광산" in cat:
+        if pos:  return "🟢 기회 — 광산용 로프 공급 기회 검토, 관련 영업팀 공유"
+        return "📌 모니터링 — 광산 수요 예측 참고"
+    if "시장" in cat:
+        if up:   return "🟡 주의 — 원자재 가격 상승 → 구매팀 재고 전략·판가 조정 검토"
+        if down: return "📌 참고 — 원가 절감 기회, 경쟁사 덤핑 가능성 모니터링"
+        return "📌 참고 — 구매·영업팀 공유 및 전략 수립 참고"
+    if "규정" in cat:
+        return "🟡 주의 — 품질·인증팀 검토, 제품 인증 계획 업데이트 필요"
+    return "📌 참고 — 관련 부서 공유 검토"
+
+
+# ──────────────────────────────────────────────
 # HTML 보고서 생성
 # ──────────────────────────────────────────────
-def make_cards(items: list[dict]) -> str:
-    html = ""
+def _card_html(a: dict, rank: int = 0, is_comp: bool = False) -> str:
+    comp_cls = " comp" if is_comp else ""
+    rank_badge = f'<span class="rank-badge">#{rank}</span>' if rank else ""
+    rel  = dsr_relevance(a)
+    act  = action_recommendation(a)
+    comp_insights = f"""
+        <div class="insight-row">
+          <div class="insight act"><span class="ilabel">대응 방안</span><span class="itext">{act}</span></div>
+        </div>""" if not is_comp else ""
+    return f"""
+    <div class="card{comp_cls}">
+      <div class="card-top">
+        <div class="card-meta">
+          <span class="card-src">{a['source']}</span>
+          <span class="card-date">{a['published']}</span>
+        </div>
+        {rank_badge}
+      </div>
+      <a class="card-title" href="{a['link']}" target="_blank">{a['title']}</a>
+      <div class="card-body">{a['summary']}</div>
+      <div class="card-insights">
+        <div class="insight-row">
+          <div class="insight rel"><span class="ilabel">DSR 연관</span><span class="itext">{rel}</span></div>
+        </div>{comp_insights}
+      </div>
+    </div>"""
+
+
+def make_cards(items: list[dict], is_comp: bool = False) -> str:
+    html = '<div class="grid">'
     for a in items:
-        html += f"""
-        <div class="card">
-          <div class="card-meta">{a['source']} &nbsp;|&nbsp; {a['published']}</div>
-          <a class="card-title" href="{a['link']}" target="_blank">{a['title']}</a>
-          <div class="card-body">{a['summary']}</div>
-        </div>"""
+        html += _card_html(a, is_comp=is_comp)
+    html += '</div>'
     return html
 
 
-def make_sections(grouped: dict) -> str:
+def make_top5_html(dsr_articles: list[dict]) -> str:
+    if not dsr_articles:
+        return ""
+    top5 = sorted(dsr_articles, key=score_article, reverse=True)[:5]
+    cards = "".join(_card_html(a, rank=i+1) for i, a in enumerate(top5))
+    return f"""
+    <div class="top5-section">
+      <div class="top5-header">
+        <span class="top5-icon">⭐</span>
+        <span class="top5-title">오늘의 DSR 핵심 기사 Top 5</span>
+        <span class="top5-sub">관련도 높은 순으로 자동 선별</span>
+      </div>
+      <div class="grid">{cards}</div>
+    </div>"""
+
+
+def make_sections(grouped: dict, is_comp: bool = False) -> str:
+    comp_cls = " comp" if is_comp else ""
     html = ""
     for cat in sorted(grouped.keys()):
         items = grouped[cat]
+        icon = cat.split()[0] if cat else ""
+        name = cat[len(icon):].strip() if icon else cat
         html += f"""
-      <div class="section-title">{cat} <span class="count">{len(items)}</span></div>
-      {make_cards(items)}"""
-    return html or '<p style="color:#888;text-align:center;padding:40px">수집된 기사가 없습니다.</p>'
+      <div class="section-header{comp_cls}">
+        <span class="section-icon">{icon}</span>
+        <span class="section-name">{name}</span>
+        <span class="section-cnt">{len(items)}</span>
+      </div>
+      {make_cards(items, is_comp)}"""
+    return html or '<div class="empty"><div class="empty-icon">📭</div><div class="empty-text">수집된 기사가 없습니다.</div></div>'
 
 
 def build_html(articles: list[dict], output_dir: Path) -> Path:
@@ -279,133 +404,266 @@ def build_html(articles: list[dict], output_dir: Path) -> Path:
     for a in comp_articles:
         comp_grouped.setdefault(a["category"], []).append(a)
 
-    # 탭 배지
-    dsr_badge  = f'DSR 업계 동향 <span class="tab-count">{len(dsr_articles)}</span>'
-    comp_badge = f'경쟁사 동향 <span class="tab-count">{len(comp_articles)}</span>'
-
     # 섹션 HTML
-    dsr_sections  = make_sections(dsr_grouped)
-    comp_sections = make_sections(comp_grouped)
+    dsr_sections  = make_sections(dsr_grouped, is_comp=False)
+    comp_sections = make_sections(comp_grouped, is_comp=True)
 
-    # 전체 배지 (탭바 아래)
-    def badges(grouped):
-        return "".join(f'<span class="badge">{cat} {len(v)}건</span>' for cat, v in sorted(grouped.items()))
+    # 필터 칩 (탭바 아래)
+    def chips(grouped, is_comp=False):
+        cls = " comp" if is_comp else ""
+        return "".join(f'<span class="chip{cls}">{cat} <strong>{len(v)}</strong></span>' for cat, v in sorted(grouped.items()))
 
-    dsr_badges  = badges(dsr_grouped)  or '<span style="color:#aaa">수집된 기사 없음</span>'
-    comp_badges = badges(comp_grouped) or '<span style="color:#aaa">수집된 기사 없음</span>'
+    dsr_badges  = chips(dsr_grouped)  or '<span style="color:#aaa;font-size:.8rem">수집된 기사 없음</span>'
+    comp_badges = chips(comp_grouped, is_comp=True) or '<span style="color:#aaa;font-size:.8rem">수집된 기사 없음</span>'
+
+    top5_html = make_top5_html(dsr_articles)
 
     html = f"""<!DOCTYPE html>
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>DSR 일일 업계 동향 – {datetime.now().strftime('%Y년 %m월 %d일')}</title>
+  <title>DSR Daily Brief · {datetime.now().strftime('%Y.%m.%d')}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
   <style>
+    :root {{
+      --blue:      #1565C0;
+      --blue-lt:   #E3F0FF;
+      --blue-dk:   #0D3F7A;
+      --red:       #B71C1C;
+      --red-lt:    #FFEBEE;
+      --gold:      #F57F17;
+      --gold-lt:   #FFF8E1;
+      --green:     #2E7D32;
+      --green-lt:  #E8F5E9;
+      --gray-bg:   #F4F6FA;
+      --gray-bdr:  #DDE2EE;
+      --gray-text: #6B7280;
+      --white:     #FFFFFF;
+      --text:      #1A1F2E;
+    }}
     * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-    body {{ font-family: 'Malgun Gothic', '맑은 고딕', sans-serif; background: #f0f2f5; color: #222; }}
-    header {{ background: linear-gradient(135deg,#003366,#0055a5); color: #fff; padding: 24px 36px; }}
-    header h1 {{ font-size: 1.6rem; letter-spacing: -.5px; }}
-    header p  {{ font-size: 0.85rem; opacity: .75; margin-top: 5px; }}
-    /* 탭 */
-    .tab-bar {{ background: #fff; border-bottom: 2px solid #e0e4ea;
-                display: flex; align-items: stretch; padding: 0 24px; gap: 0; }}
-    .tab {{ padding: 14px 28px; font-size: 0.95rem; font-weight: 600; cursor: pointer;
-            border-bottom: 3px solid transparent; margin-bottom: -2px; color: #888;
-            display: flex; align-items: center; gap: 8px; transition: color .15s; user-select: none; }}
-    .tab:hover {{ color: #0055a5; }}
-    .tab.active {{ color: #0055a5; border-bottom-color: #0055a5; }}
-    .tab.comp.active {{ color: #c0392b; border-bottom-color: #c0392b; }}
-    .tab-count {{ font-size: 0.75rem; background: #e8f0fe; color: #0055a5;
-                  border-radius: 10px; padding: 1px 8px; }}
-    .tab.comp .tab-count {{ background: #fde8e8; color: #c0392b; }}
-    .tab-translate {{ margin-left: auto; display: flex; align-items: center; gap: 10px; }}
-    /* 배지 바 */
-    .badge-bar {{ padding: 10px 28px; background: #f8f9fb; border-bottom: 1px solid #e8eaf0;
-                  display: flex; flex-wrap: wrap; gap: 7px; min-height: 42px; }}
-    .badge {{ background: #e8f0fe; color: #0055a5; border-radius: 16px; padding: 3px 12px;
-              font-size: 0.78rem; font-weight: 600; }}
-    .badge.comp {{ background: #fde8e8; color: #c0392b; }}
-    /* 번역 */
-    .translate-btn {{ background: #0055a5; color: #fff; border: none; border-radius: 8px;
-                      padding: 7px 18px; font-size: 0.85rem; cursor: pointer; font-family: inherit; }}
-    .translate-btn:hover {{ background: #003f7f; }}
-    .translate-btn:disabled {{ background: #aaa; cursor: not-allowed; }}
-    .progress {{ display: none; font-size: 0.8rem; color: #0055a5; align-items: center; gap: 6px; }}
-    .progress.show {{ display: flex; }}
-    .spinner {{ width: 13px; height: 13px; border: 2px solid #e0e4ea; border-top-color: #0055a5;
-                border-radius: 50%; animation: spin .7s linear infinite; }}
-    @keyframes spin {{ to {{ transform: rotate(360deg); }} }}
-    /* 오버레이 */
-    #overlay {{ position: fixed; inset: 0; background: #f0f2f5;
+    body {{ font-family: 'Inter', 'Noto Sans KR', 'Malgun Gothic', sans-serif;
+            background: var(--gray-bg); color: var(--text); min-height: 100vh; }}
+
+    /* ── 오버레이 ── */
+    #overlay {{ position: fixed; inset: 0; background: rgba(244,246,250,.96);
+      backdrop-filter: blur(4px);
       display: flex; flex-direction: column; align-items: center; justify-content: center;
-      z-index: 9999; gap: 18px; }}
-    #overlay .ov-spinner {{ width: 48px; height: 48px; border: 4px solid #d0d8e8;
-      border-top-color: #0055a5; border-radius: 50%; animation: spin .8s linear infinite; }}
-    #overlay p {{ font-size: 1rem; color: #0055a5; font-weight: 600; }}
-    #overlay small {{ font-size: 0.82rem; color: #888; }}
-    /* 콘텐츠 탭 패널 */
+      z-index: 9999; gap: 20px; }}
+    #overlay .ov-ring {{ width: 52px; height: 52px; border: 4px solid var(--gray-bdr);
+      border-top-color: var(--blue); border-radius: 50%; animation: spin .8s linear infinite; }}
+    #overlay .ov-title {{ font-size: 1rem; font-weight: 700; color: var(--blue); }}
+    #overlay .ov-sub   {{ font-size: 0.82rem; color: var(--gray-text); }}
+    @keyframes spin {{ to {{ transform: rotate(360deg); }} }}
+
+    /* ── 상단 바 ── */
+    .topbar {{
+      background: linear-gradient(100deg, #0D3F7A 0%, #1565C0 60%, #1976D2 100%);
+      padding: 0 40px;
+      display: flex; align-items: center; justify-content: space-between;
+      height: 64px; position: sticky; top: 0; z-index: 100;
+      box-shadow: 0 2px 12px rgba(13,63,122,.35);
+    }}
+    .topbar-left {{ display: flex; align-items: center; gap: 14px; }}
+    .topbar-logo {{ width: 36px; height: 36px; background: rgba(255,255,255,.18);
+                    border-radius: 9px; display: flex; align-items: center; justify-content: center;
+                    font-weight: 800; font-size: 0.75rem; color: #fff; letter-spacing: 1px;
+                    border: 1.5px solid rgba(255,255,255,.3); }}
+    .topbar-title {{ color: #fff; font-size: 1.05rem; font-weight: 700; letter-spacing: -.3px; }}
+    .topbar-date  {{ color: rgba(255,255,255,.6); font-size: 0.8rem; }}
+    .topbar-right {{ display: flex; align-items: center; gap: 10px; }}
+    .stat-chip {{ background: rgba(255,255,255,.13); color: rgba(255,255,255,.92);
+                  border-radius: 20px; padding: 4px 14px; font-size: 0.78rem; font-weight: 500;
+                  border: 1px solid rgba(255,255,255,.18); }}
+    .stat-chip b {{ font-weight: 700; }}
+    .spinner-wrap {{ display: flex; align-items: center; gap: 7px;
+                     font-size: 0.78rem; color: rgba(255,255,255,.75); }}
+    .spinner {{ width: 13px; height: 13px; border: 2px solid rgba(255,255,255,.3);
+                border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite;
+                flex-shrink: 0; }}
+
+    /* ── 탭 네비 ── */
+    .tab-nav {{
+      background: var(--white); border-bottom: 1px solid var(--gray-bdr);
+      display: flex; align-items: stretch; padding: 0 32px;
+      position: sticky; top: 64px; z-index: 99;
+      box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }}
+    .tab {{
+      padding: 0 24px; height: 50px; font-size: 0.88rem; font-weight: 600;
+      cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -1px;
+      color: var(--gray-text); display: flex; align-items: center; gap: 8px;
+      transition: color .18s, border-color .18s; user-select: none; white-space: nowrap;
+    }}
+    .tab:hover {{ color: var(--blue); }}
+    .tab.active {{ color: var(--blue); border-bottom-color: var(--blue); }}
+    .tab.comp:hover {{ color: var(--red); }}
+    .tab.comp.active {{ color: var(--red); border-bottom-color: var(--red); }}
+    .tab-pill {{ font-size: 0.72rem; font-weight: 700; border-radius: 20px;
+                  padding: 2px 9px; background: var(--blue-lt); color: var(--blue); }}
+    .tab.comp .tab-pill {{ background: var(--red-lt); color: var(--red); }}
+
+    /* ── 패널 ── */
     .tab-panel {{ display: none; }}
     .tab-panel.active {{ display: block; }}
-    .container {{ max-width: 980px; margin: 24px auto; padding: 0 16px; }}
-    .section-title {{ font-size: 1.05rem; font-weight: 700; color: #003366;
-                      border-left: 4px solid #0055a5; padding-left: 12px;
-                      margin: 28px 0 10px; display: flex; align-items: center; gap: 8px; }}
-    .section-title.comp {{ border-left-color: #c0392b; color: #7b1e1e; }}
-    .count {{ background: #0055a5; color: #fff; border-radius: 10px; padding: 1px 8px; font-size: 0.75rem; }}
-    .count.comp {{ background: #c0392b; }}
-    .card {{ background: #fff; border-radius: 10px; padding: 15px 20px; margin-bottom: 10px;
-             box-shadow: 0 1px 5px rgba(0,0,0,.07); transition: box-shadow .15s; }}
-    .card:hover {{ box-shadow: 0 4px 12px rgba(0,83,165,.10); }}
-    .card.comp:hover {{ box-shadow: 0 4px 12px rgba(192,57,43,.10); }}
-    .card-meta  {{ font-size: 0.75rem; color: #999; margin-bottom: 5px; }}
-    .card-title {{ display: block; font-size: 0.97rem; font-weight: 600; color: #0055a5;
-                   text-decoration: none; margin-bottom: 5px; line-height: 1.45; }}
-    .card.comp .card-title {{ color: #c0392b; }}
+
+    /* ── 필터 바 ── */
+    .filter-bar {{
+      background: var(--white); border-bottom: 1px solid var(--gray-bdr);
+      padding: 10px 40px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    }}
+    .filter-label {{ font-size: 0.72rem; font-weight: 700; color: var(--gray-text);
+                     text-transform: uppercase; letter-spacing: .6px; margin-right: 4px; }}
+    .chip {{ font-size: 0.75rem; font-weight: 600; border-radius: 20px;
+              padding: 4px 13px; background: var(--blue-lt); color: var(--blue);
+              transition: all .15s; }}
+    .chip.comp {{ background: var(--red-lt); color: var(--red); }}
+
+    /* ── 페이지 래퍼 ── */
+    .page {{ max-width: 1160px; margin: 0 auto; padding: 28px 24px 56px; }}
+
+    /* ── Top 5 섹션 ── */
+    .top5-section {{
+      background: linear-gradient(135deg, var(--gold-lt) 0%, #FFFDE7 100%);
+      border: 1.5px solid #FFE082; border-radius: 16px;
+      padding: 20px 24px 24px; margin-bottom: 36px;
+    }}
+    .top5-header {{
+      display: flex; align-items: center; gap: 10px; margin-bottom: 18px;
+    }}
+    .top5-icon {{ font-size: 1.3rem; }}
+    .top5-title {{ font-size: 1rem; font-weight: 700; color: var(--gold); }}
+    .top5-sub {{ font-size: 0.75rem; color: #A0522D; margin-left: 6px;
+                  background: rgba(245,127,23,.1); padding: 2px 10px; border-radius: 20px; }}
+    .rank-badge {{
+      font-size: 0.72rem; font-weight: 800; color: var(--gold);
+      background: rgba(245,127,23,.12); border: 1px solid rgba(245,127,23,.3);
+      border-radius: 20px; padding: 2px 9px; white-space: nowrap;
+    }}
+
+    /* ── 섹션 헤더 ── */
+    .section-header {{
+      display: flex; align-items: center; gap: 10px;
+      margin: 36px 0 14px; padding-bottom: 10px;
+      border-bottom: 2px solid var(--blue-lt);
+    }}
+    .section-header.comp {{ border-bottom-color: var(--red-lt); }}
+    .section-icon {{ font-size: 1.1rem; }}
+    .section-name {{ font-size: 0.95rem; font-weight: 700; color: var(--blue-dk); }}
+    .section-header.comp .section-name {{ color: var(--red); }}
+    .section-cnt {{ margin-left: auto; font-size: 0.72rem; font-weight: 700;
+                     background: var(--blue); color: #fff; border-radius: 20px; padding: 2px 10px; }}
+    .section-header.comp .section-cnt {{ background: var(--red); }}
+
+    /* ── 카드 그리드 ── */
+    .grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; }}
+
+    .card {{
+      background: var(--white); border-radius: 12px; padding: 18px 20px 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06), 0 1px 8px rgba(0,0,0,.04);
+      transition: transform .15s, box-shadow .15s;
+      border-top: 3px solid transparent;
+      display: flex; flex-direction: column; gap: 0;
+    }}
+    .card:hover {{ transform: translateY(-2px); box-shadow: 0 6px 22px rgba(21,101,192,.13);
+                   border-top-color: var(--blue); }}
+    .card.comp:hover {{ box-shadow: 0 6px 22px rgba(183,28,28,.11); border-top-color: var(--red); }}
+
+    .card-top {{ display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }}
+    .card-meta {{ display: flex; align-items: center; gap: 8px; }}
+    .card-src  {{ font-size: 0.68rem; font-weight: 700; color: var(--gray-text);
+                  text-transform: uppercase; letter-spacing: .5px; }}
+    .card-date {{ font-size: 0.68rem; color: #B0BEC5; }}
+
+    .card-title {{ display: block; font-size: 0.91rem; font-weight: 700; color: var(--blue);
+                   text-decoration: none; line-height: 1.55; margin-bottom: 8px; }}
+    .card.comp .card-title {{ color: var(--red); }}
     .card-title:hover {{ text-decoration: underline; }}
-    .card-body  {{ font-size: 0.86rem; color: #555; line-height: 1.65; }}
-    .ko-text    {{ color: #1a1a1a; }}
-    footer {{ text-align: center; padding: 24px; font-size: 0.75rem; color: #bbb; }}
+
+    .card-body {{ font-size: 0.81rem; color: #546E7A; line-height: 1.7; margin-bottom: 12px;
+                  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+                  overflow: hidden; }}
+    .ko-text {{ color: var(--text) !important; }}
+
+    /* ── 인사이트 박스 ── */
+    .card-insights {{ border-top: 1px solid var(--gray-bdr); padding-top: 10px;
+                       display: flex; flex-direction: column; gap: 6px; }}
+    .insight-row {{ display: flex; flex-direction: column; gap: 6px; }}
+    .insight {{ display: flex; flex-direction: column; gap: 2px; padding: 7px 10px;
+                border-radius: 8px; }}
+    .insight.rel {{ background: var(--blue-lt); }}
+    .insight.act {{ background: var(--green-lt); }}
+    .card.comp .insight.rel {{ background: var(--red-lt); }}
+    .ilabel {{ font-size: 0.65rem; font-weight: 800; text-transform: uppercase;
+               letter-spacing: .6px; color: var(--gray-text); margin-bottom: 1px; }}
+    .insight.rel .ilabel {{ color: var(--blue); }}
+    .insight.act .ilabel {{ color: var(--green); }}
+    .card.comp .insight.rel .ilabel {{ color: var(--red); }}
+    .itext {{ font-size: 0.78rem; font-weight: 500; line-height: 1.5; color: var(--text); }}
+
+    /* ── 빈 상태 ── */
+    .empty {{ text-align: center; padding: 64px 20px; color: var(--gray-text); }}
+    .empty-icon {{ font-size: 2.5rem; margin-bottom: 12px; }}
+    .empty-text {{ font-size: 0.9rem; }}
+
+    /* ── 푸터 ── */
+    footer {{ text-align: center; padding: 20px; font-size: 0.72rem;
+              color: #B0BEC5; border-top: 1px solid var(--gray-bdr); background: var(--white); }}
   </style>
 </head>
 <body>
+
   <div id="overlay">
-    <div class="ov-spinner"></div>
-    <p>한국어로 번역 중입니다...</p>
-    <small id="ov-progress">잠시만 기다려 주세요</small>
+    <div class="ov-ring"></div>
+    <div class="ov-title">기사를 한국어로 번역 중입니다</div>
+    <div class="ov-sub" id="ov-progress">잠시만 기다려 주세요</div>
   </div>
 
-  <header>
-    <h1>DSR 일일 업계 동향 보고서</h1>
-    <p>Wire Rope · Fiber Rope &nbsp;|&nbsp; 생성: {datetime.now().strftime('%Y년 %m월 %d일 %H:%M')} &nbsp;|&nbsp; 전체 {len(articles)}건 (업계 {len(dsr_articles)} · 경쟁사 {len(comp_articles)})</p>
-  </header>
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="topbar-logo">DSR</div>
+      <span class="topbar-title">Daily Brief</span>
+      <span class="topbar-date">&nbsp;{datetime.now().strftime('%Y년 %m월 %d일')}</span>
+    </div>
+    <div class="topbar-right">
+      <div class="stat-chip">전체 <b>{len(articles)}</b>건 &nbsp;|&nbsp; 업계 <b>{len(dsr_articles)}</b> · 경쟁사 <b>{len(comp_articles)}</b></div>
+      <div class="spinner-wrap" id="progress">
+        <span class="spinner"></span>
+        <span id="progressText">번역 중...</span>
+      </div>
+    </div>
+  </div>
 
-  <!-- 탭 바 -->
-  <div class="tab-bar">
+  <div class="tab-nav">
     <div class="tab active" id="tab-dsr" onclick="switchTab('dsr')">
-      업계 동향 <span class="tab-count">{len(dsr_articles)}</span>
+      업계 동향 <span class="tab-pill">{len(dsr_articles)}</span>
     </div>
     <div class="tab comp" id="tab-comp" onclick="switchTab('comp')">
-      경쟁사 동향 <span class="tab-count">{len(comp_articles)}</span>
-    </div>
-    <div class="tab-translate">
-      <span class="progress show" id="progress"><span class="spinner"></span><span id="progressText">번역 중...</span></span>
-      <button class="translate-btn" id="translateBtn" onclick="translateAll()" style="display:none">번역 완료</button>
+      경쟁사 동향 <span class="tab-pill">{len(comp_articles)}</span>
     </div>
   </div>
 
-  <!-- 업계 탭 -->
   <div class="tab-panel active" id="panel-dsr">
-    <div class="badge-bar">{dsr_badges}</div>
-    <div class="container">{dsr_sections}</div>
+    <div class="filter-bar">
+      <span class="filter-label">카테고리</span>
+      {dsr_badges}
+    </div>
+    <div class="page">
+      {top5_html}
+      {dsr_sections}
+    </div>
   </div>
 
-  <!-- 경쟁사 탭 -->
   <div class="tab-panel" id="panel-comp">
-    <div class="badge-bar">{comp_badges}</div>
-    <div class="container">{comp_sections}</div>
+    <div class="filter-bar">
+      <span class="filter-label">경쟁사</span>
+      {comp_badges}
+    </div>
+    <div class="page">{comp_sections}</div>
   </div>
 
-  <footer>DSR 업계 동향 수집기 &nbsp;|&nbsp; 출처: Offshore Energy · Hellenic Shipping News · Maritime Executive · Rigzone · Port Technology · Mining.com</footer>
+  <footer>DSR Daily Brief &nbsp;·&nbsp; Offshore Energy · Hellenic Shipping News · Maritime Executive · Rigzone · Port Technology · Mining.com &nbsp;·&nbsp; {datetime.now().strftime('%Y.%m.%d %H:%M')} 생성</footer>
 
   <script>
   const STORAGE_KEY = 'dsr_ko_{datetime.now().strftime("%Y%m%d")}';
@@ -417,9 +675,7 @@ def build_html(articles: list[dict], output_dir: Path) -> Path:
       const res = await fetch(url);
       const data = await res.json();
       return data[0].map(s => s[0]).join('');
-    }} catch(e) {{
-      return text;
-    }}
+    }} catch(e) {{ return text; }}
   }}
 
   function applyTranslations(cache) {{
@@ -427,18 +683,15 @@ def build_html(articles: list[dict], output_dir: Path) -> Path:
       const orig = el.getAttribute('data-orig') || el.innerText;
       el.setAttribute('data-orig', orig);
       if (cache[orig]) {{
-        const textNode = [...el.childNodes].find(n => n.nodeType === Node.TEXT_NODE);
-        if (textNode) textNode.textContent = cache[orig];
+        const tn = [...el.childNodes].find(n => n.nodeType === Node.TEXT_NODE);
+        if (tn) tn.textContent = cache[orig];
         el.classList.add('ko-text');
       }}
     }});
     document.querySelectorAll('.card-body').forEach(el => {{
       const orig = el.getAttribute('data-orig') || el.innerText;
       el.setAttribute('data-orig', orig);
-      if (cache[orig]) {{
-        el.textContent = cache[orig];
-        el.classList.add('ko-text');
-      }}
+      if (cache[orig]) {{ el.textContent = cache[orig]; el.classList.add('ko-text'); }}
     }});
   }}
 
@@ -451,43 +704,29 @@ def build_html(articles: list[dict], output_dir: Path) -> Path:
 
   function hideOverlay() {{
     const ov = document.getElementById('overlay');
-    if (ov) {{ ov.style.opacity = '0'; ov.style.transition = 'opacity .4s'; setTimeout(() => ov.remove(), 400); }}
+    if (ov) {{ ov.style.opacity='0'; ov.style.transition='opacity .4s'; setTimeout(()=>ov.remove(),400); }}
   }}
 
-  // 페이지 로드 시: 저장된 번역 복원 또는 자동 번역 시작
   window.addEventListener('DOMContentLoaded', () => {{
     try {{
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {{
         const cache = JSON.parse(saved);
         applyTranslations(cache);
-        // 캐시 항목이 실제로 적용됐는지 확인 (키 불일치 시 재번역)
-        const translated = document.querySelectorAll('.ko-text').length;
-        if (translated === 0) {{
-          localStorage.removeItem(STORAGE_KEY);
-          translateAll();
+        if (document.querySelectorAll('.ko-text').length === 0) {{
+          localStorage.removeItem(STORAGE_KEY); translateAll();
         }} else {{
           hideOverlay();
-          document.getElementById('progress').classList.remove('show');
-          document.getElementById('translateBtn').style.display = 'flex';
-          document.getElementById('translateBtn').disabled = true;
-          document.getElementById('translateBtn').textContent = '번역 완료';
+          document.getElementById('progress').style.display = 'none';
         }}
-      }} else {{
-        translateAll();
-      }}
-    }} catch(e) {{
-      translateAll();
-    }}
+      }} else {{ translateAll(); }}
+    }} catch(e) {{ translateAll(); }}
   }});
 
   async function translateAll() {{
-    const btn = document.getElementById('translateBtn');
     const progress = document.getElementById('progress');
     const progressText = document.getElementById('progressText');
-    btn.disabled = true;
-    btn.textContent = '번역 완료';
-    progress.classList.add('show');
+    progress.style.display = 'flex';
 
     const titles = document.querySelectorAll('.card-title');
     const bodies = document.querySelectorAll('.card-body');
@@ -501,33 +740,24 @@ def build_html(articles: list[dict], output_dir: Path) -> Path:
       const translated = await translateText(original);
       cache[original] = translated;
       if (isLink) {{
-        const textNode = [...el.childNodes].find(n => n.nodeType === Node.TEXT_NODE);
-        if (textNode) textNode.textContent = translated;
+        const tn = [...el.childNodes].find(n => n.nodeType === Node.TEXT_NODE);
+        if (tn) tn.textContent = translated;
         else el.insertBefore(document.createTextNode(translated), el.firstChild);
-      }} else {{
-        el.textContent = translated;
-      }}
+      }} else {{ el.textContent = translated; }}
       el.classList.add('ko-text');
       done++;
-      const msg = `${{done}} / ${{total}} 번역 완료`;
       progressText.textContent = `번역 중... (${{done}}/${{total}})`;
       const ovp = document.getElementById('ov-progress');
-      if (ovp) ovp.textContent = msg;
+      if (ovp) ovp.textContent = `${{done}} / ${{total}} 번역 완료`;
       await new Promise(r => setTimeout(r, 80));
     }}
 
     for (const el of titles) await doItem(el, true);
     for (const el of bodies) await doItem(el, false);
 
-    // 번역 결과를 localStorage에 저장 (#2)
     try {{ localStorage.setItem(STORAGE_KEY, JSON.stringify(cache)); }} catch(e) {{}}
-
     hideOverlay();
-    progress.classList.remove('show');
-    progressText.textContent = '번역 중...';
-    btn.style.display = 'flex';
-    btn.disabled = true;
-    btn.textContent = '번역 완료';
+    progress.style.display = 'none';
   }}
   </script>
 </body>
