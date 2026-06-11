@@ -84,6 +84,36 @@ CATEGORIES = {
 
 ALL_KEYWORDS = [kw for kws in CATEGORIES.values() for kw in kws]
 
+# ──────────────────────────────────────────────
+# 경쟁사 키워드 (별도 탭으로 분리 표시)
+# ──────────────────────────────────────────────
+COMPETITOR_KEYWORDS = [
+    # 고려제강 / Kiswire
+    "Kiswire", "고려제강", "Koryо Wire",
+    # 글로벌 직접 경쟁사
+    "Bridon-Bekaert", "Bridon", "Bekaert",
+    "WireCo", "WireCo World",
+    "Usha Martin",
+    "Tokyo Rope",
+    "Teufelberger",
+    "Pfeifer", "Drako",
+    "Lankhorst",
+    "Samson Rope",
+    "Cortland Cable",
+    "Fasten Group", "Langshan",
+    "Juli Sling",
+]
+
+COMPETITOR_CATEGORIES = {
+    "🏢 고려제강·Kiswire": ["Kiswire", "고려제강", "Koryo Wire"],
+    "🌐 글로벌 경쟁사": [
+        "Bridon", "Bekaert", "WireCo", "Usha Martin",
+        "Tokyo Rope", "Teufelberger", "Pfeifer", "Drako",
+        "Lankhorst", "Samson Rope", "Cortland", "Fasten Group",
+        "Langshan", "Juli Sling",
+    ],
+}
+
 # DSR 사업과 무관한 기사 제외 키워드
 EXCLUDE_KEYWORDS = [
     "stock market", "stock price", "equity", "IPO", "bond yield",
@@ -95,11 +125,16 @@ EXCLUDE_KEYWORDS = [
 ]
 
 
+def is_competitor(title: str, summary: str) -> bool:
+    text = (title + " " + summary).lower()
+    return any(kw.lower() in text for kw in COMPETITOR_KEYWORDS)
+
+
 def is_relevant(title: str, summary: str) -> bool:
     text = (title + " " + summary).lower()
     if any(kw.lower() in text for kw in EXCLUDE_KEYWORDS):
         return False
-    return any(kw.lower() in text for kw in ALL_KEYWORDS)
+    return any(kw.lower() in text for kw in ALL_KEYWORDS) or is_competitor(title, summary)
 
 
 def get_category(title: str, summary: str) -> str:
@@ -108,6 +143,14 @@ def get_category(title: str, summary: str) -> str:
         if any(kw.lower() in text for kw in kws):
             return cat
     return "📰 기타"
+
+
+def get_competitor_category(title: str, summary: str) -> str:
+    text = (title + " " + summary).lower()
+    for cat, kws in COMPETITOR_CATEGORIES.items():
+        if any(kw.lower() in text for kw in kws):
+            return cat
+    return "🌐 글로벌 경쟁사"
 
 
 def strip_html(text: str) -> str:
@@ -143,13 +186,15 @@ def fetch_articles(hours: int = 24) -> list[dict]:
                 if not title or not is_relevant(title, summary):
                     continue
 
+                comp = is_competitor(title, summary)
                 articles.append({
-                    "source":    feed_info["name"],
-                    "title":     title,
-                    "summary":   summary,
-                    "link":      link,
-                    "published": published.strftime("%Y-%m-%d %H:%M UTC") if published else "시각 불명",
-                    "category":  get_category(title, summary),
+                    "source":      feed_info["name"],
+                    "title":       title,
+                    "summary":     summary,
+                    "link":        link,
+                    "published":   published.strftime("%Y-%m-%d %H:%M UTC") if published else "시각 불명",
+                    "category":    get_competitor_category(title, summary) if comp else get_category(title, summary),
+                    "is_competitor": comp,
                 })
                 count += 1
 
@@ -182,38 +227,59 @@ def fetch_articles(hours: int = 24) -> list[dict]:
 # ──────────────────────────────────────────────
 # HTML 보고서 생성
 # ──────────────────────────────────────────────
+def make_cards(items: list[dict]) -> str:
+    html = ""
+    for a in items:
+        html += f"""
+        <div class="card">
+          <div class="card-meta">{a['source']} &nbsp;|&nbsp; {a['published']}</div>
+          <a class="card-title" href="{a['link']}" target="_blank">{a['title']}</a>
+          <div class="card-body">{a['summary']}</div>
+        </div>"""
+    return html
+
+
+def make_sections(grouped: dict) -> str:
+    html = ""
+    for cat in sorted(grouped.keys()):
+        items = grouped[cat]
+        html += f"""
+      <div class="section-title">{cat} <span class="count">{len(items)}</span></div>
+      {make_cards(items)}"""
+    return html or '<p style="color:#888;text-align:center;padding:40px">수집된 기사가 없습니다.</p>'
+
+
 def build_html(articles: list[dict], output_dir: Path) -> Path:
     today_str = datetime.now().strftime("%Y%m%d")
     filename  = output_dir / f"DSR동향_{today_str}.html"
 
-    # 카테고리별 그룹핑
-    grouped: dict[str, list] = {}
-    for a in articles:
-        grouped.setdefault(a["category"], []).append(a)
+    # DSR 업계 기사 / 경쟁사 기사 분리
+    dsr_articles  = [a for a in articles if not a["is_competitor"]]
+    comp_articles = [a for a in articles if a["is_competitor"]]
 
-    # 통계 요약 배지
-    stats_html = ""
-    for cat, items in sorted(grouped.items()):
-        stats_html += f'<span class="badge">{cat} {len(items)}건</span>'
+    # 각각 카테고리별 그룹핑
+    dsr_grouped: dict[str, list] = {}
+    for a in dsr_articles:
+        dsr_grouped.setdefault(a["category"], []).append(a)
 
-    # 카테고리별 섹션
-    sections_html = ""
-    for cat in sorted(grouped.keys()):
-        items = grouped[cat]
-        cards = ""
-        for a in items:
-            cards += f"""
-          <div class="card">
-            <div class="card-meta">{a['source']} &nbsp;|&nbsp; {a['published']}</div>
-            <a class="card-title" href="{a['link']}" target="_blank">{a['title']}</a>
-            <div class="card-body">{a['summary']}</div>
-          </div>"""
-        sections_html += f"""
-      <div class="section-title">{cat} <span class="count">{len(items)}</span></div>
-      {cards}"""
+    comp_grouped: dict[str, list] = {}
+    for a in comp_articles:
+        comp_grouped.setdefault(a["category"], []).append(a)
 
-    if not articles:
-        sections_html = '<p style="color:#888;text-align:center;padding:40px">수집된 기사가 없습니다. 잠시 후 다시 시도해주세요.</p>'
+    # 탭 배지
+    dsr_badge  = f'DSR 업계 동향 <span class="tab-count">{len(dsr_articles)}</span>'
+    comp_badge = f'경쟁사 동향 <span class="tab-count">{len(comp_articles)}</span>'
+
+    # 섹션 HTML
+    dsr_sections  = make_sections(dsr_grouped)
+    comp_sections = make_sections(comp_grouped)
+
+    # 전체 배지 (탭바 아래)
+    def badges(grouped):
+        return "".join(f'<span class="badge">{cat} {len(v)}건</span>' for cat, v in sorted(grouped.items()))
+
+    dsr_badges  = badges(dsr_grouped)  or '<span style="color:#aaa">수집된 기사 없음</span>'
+    comp_badges = badges(comp_grouped) or '<span style="color:#aaa">수집된 기사 없음</span>'
 
     html = f"""<!DOCTYPE html>
 <html lang="ko">
@@ -224,54 +290,71 @@ def build_html(articles: list[dict], output_dir: Path) -> Path:
   <style>
     * {{ box-sizing: border-box; margin: 0; padding: 0; }}
     body {{ font-family: 'Malgun Gothic', '맑은 고딕', sans-serif; background: #f0f2f5; color: #222; }}
-    header {{ background: linear-gradient(135deg,#003366,#0055a5); color: #fff; padding: 28px 36px; }}
-    header h1 {{ font-size: 1.7rem; letter-spacing: -.5px; }}
-    header p  {{ font-size: 0.88rem; opacity: .75; margin-top: 6px; }}
-    .toolbar {{ padding: 14px 36px; background: #fff; border-bottom: 1px solid #e0e4ea;
-                display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }}
-    .badge {{ background: #e8f0fe; color: #0055a5; border-radius: 20px; padding: 4px 14px; font-size: 0.82rem; font-weight: 600; }}
-    .translate-btn {{ margin-left: auto; background: #0055a5; color: #fff; border: none;
-                      border-radius: 8px; padding: 8px 20px; font-size: 0.9rem; cursor: pointer;
-                      font-family: inherit; display: flex; align-items: center; gap: 6px; }}
+    header {{ background: linear-gradient(135deg,#003366,#0055a5); color: #fff; padding: 24px 36px; }}
+    header h1 {{ font-size: 1.6rem; letter-spacing: -.5px; }}
+    header p  {{ font-size: 0.85rem; opacity: .75; margin-top: 5px; }}
+    /* 탭 */
+    .tab-bar {{ background: #fff; border-bottom: 2px solid #e0e4ea;
+                display: flex; align-items: stretch; padding: 0 24px; gap: 0; }}
+    .tab {{ padding: 14px 28px; font-size: 0.95rem; font-weight: 600; cursor: pointer;
+            border-bottom: 3px solid transparent; margin-bottom: -2px; color: #888;
+            display: flex; align-items: center; gap: 8px; transition: color .15s; user-select: none; }}
+    .tab:hover {{ color: #0055a5; }}
+    .tab.active {{ color: #0055a5; border-bottom-color: #0055a5; }}
+    .tab.comp.active {{ color: #c0392b; border-bottom-color: #c0392b; }}
+    .tab-count {{ font-size: 0.75rem; background: #e8f0fe; color: #0055a5;
+                  border-radius: 10px; padding: 1px 8px; }}
+    .tab.comp .tab-count {{ background: #fde8e8; color: #c0392b; }}
+    .tab-translate {{ margin-left: auto; display: flex; align-items: center; gap: 10px; }}
+    /* 배지 바 */
+    .badge-bar {{ padding: 10px 28px; background: #f8f9fb; border-bottom: 1px solid #e8eaf0;
+                  display: flex; flex-wrap: wrap; gap: 7px; min-height: 42px; }}
+    .badge {{ background: #e8f0fe; color: #0055a5; border-radius: 16px; padding: 3px 12px;
+              font-size: 0.78rem; font-weight: 600; }}
+    .badge.comp {{ background: #fde8e8; color: #c0392b; }}
+    /* 번역 */
+    .translate-btn {{ background: #0055a5; color: #fff; border: none; border-radius: 8px;
+                      padding: 7px 18px; font-size: 0.85rem; cursor: pointer; font-family: inherit; }}
     .translate-btn:hover {{ background: #003f7f; }}
     .translate-btn:disabled {{ background: #aaa; cursor: not-allowed; }}
-    .progress {{ display: none; font-size: 0.82rem; color: #0055a5; align-items: center; gap: 6px; }}
+    .progress {{ display: none; font-size: 0.8rem; color: #0055a5; align-items: center; gap: 6px; }}
     .progress.show {{ display: flex; }}
-    .spinner {{ width: 14px; height: 14px; border: 2px solid #e0e4ea; border-top-color: #0055a5;
+    .spinner {{ width: 13px; height: 13px; border: 2px solid #e0e4ea; border-top-color: #0055a5;
                 border-radius: 50%; animation: spin .7s linear infinite; }}
-    /* 번역 완료 전 영문 콘텐츠 숨김 오버레이 */
-    #overlay {{
-      position: fixed; inset: 0; background: #f0f2f5;
+    @keyframes spin {{ to {{ transform: rotate(360deg); }} }}
+    /* 오버레이 */
+    #overlay {{ position: fixed; inset: 0; background: #f0f2f5;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
-      z-index: 9999; gap: 18px;
-    }}
-    #overlay .ov-spinner {{
-      width: 48px; height: 48px;
-      border: 4px solid #d0d8e8; border-top-color: #0055a5;
-      border-radius: 50%; animation: spin .8s linear infinite;
-    }}
+      z-index: 9999; gap: 18px; }}
+    #overlay .ov-spinner {{ width: 48px; height: 48px; border: 4px solid #d0d8e8;
+      border-top-color: #0055a5; border-radius: 50%; animation: spin .8s linear infinite; }}
     #overlay p {{ font-size: 1rem; color: #0055a5; font-weight: 600; }}
     #overlay small {{ font-size: 0.82rem; color: #888; }}
-    @keyframes spin {{ to {{ transform: rotate(360deg); }} }}
-    .container {{ max-width: 980px; margin: 28px auto; padding: 0 16px; }}
-    .section-title {{ font-size: 1.1rem; font-weight: 700; color: #003366;
+    /* 콘텐츠 탭 패널 */
+    .tab-panel {{ display: none; }}
+    .tab-panel.active {{ display: block; }}
+    .container {{ max-width: 980px; margin: 24px auto; padding: 0 16px; }}
+    .section-title {{ font-size: 1.05rem; font-weight: 700; color: #003366;
                       border-left: 4px solid #0055a5; padding-left: 12px;
-                      margin: 32px 0 12px; display: flex; align-items: center; gap: 8px; }}
-    .count {{ background: #0055a5; color: #fff; border-radius: 12px; padding: 1px 9px; font-size: 0.78rem; }}
-    .card {{ background: #fff; border-radius: 10px; padding: 16px 20px; margin-bottom: 10px;
+                      margin: 28px 0 10px; display: flex; align-items: center; gap: 8px; }}
+    .section-title.comp {{ border-left-color: #c0392b; color: #7b1e1e; }}
+    .count {{ background: #0055a5; color: #fff; border-radius: 10px; padding: 1px 8px; font-size: 0.75rem; }}
+    .count.comp {{ background: #c0392b; }}
+    .card {{ background: #fff; border-radius: 10px; padding: 15px 20px; margin-bottom: 10px;
              box-shadow: 0 1px 5px rgba(0,0,0,.07); transition: box-shadow .15s; }}
-    .card:hover {{ box-shadow: 0 4px 12px rgba(0,83,165,.12); }}
-    .card-meta  {{ font-size: 0.76rem; color: #999; margin-bottom: 6px; }}
-    .card-title {{ display: block; font-size: 1rem; font-weight: 600; color: #0055a5;
-                   text-decoration: none; margin-bottom: 6px; line-height: 1.4; }}
+    .card:hover {{ box-shadow: 0 4px 12px rgba(0,83,165,.10); }}
+    .card.comp:hover {{ box-shadow: 0 4px 12px rgba(192,57,43,.10); }}
+    .card-meta  {{ font-size: 0.75rem; color: #999; margin-bottom: 5px; }}
+    .card-title {{ display: block; font-size: 0.97rem; font-weight: 600; color: #0055a5;
+                   text-decoration: none; margin-bottom: 5px; line-height: 1.45; }}
+    .card.comp .card-title {{ color: #c0392b; }}
     .card-title:hover {{ text-decoration: underline; }}
-    .card-body  {{ font-size: 0.87rem; color: #555; line-height: 1.65; }}
+    .card-body  {{ font-size: 0.86rem; color: #555; line-height: 1.65; }}
     .ko-text    {{ color: #1a1a1a; }}
-    footer {{ text-align: center; padding: 28px; font-size: 0.78rem; color: #bbb; }}
+    footer {{ text-align: center; padding: 24px; font-size: 0.75rem; color: #bbb; }}
   </style>
 </head>
 <body>
-  <!-- 번역 완료 전 영문 노출 차단 오버레이 -->
   <div id="overlay">
     <div class="ov-spinner"></div>
     <p>한국어로 번역 중입니다...</p>
@@ -280,19 +363,33 @@ def build_html(articles: list[dict], output_dir: Path) -> Path:
 
   <header>
     <h1>DSR 일일 업계 동향 보고서</h1>
-    <p>Wire Rope · Fiber Rope 업계 동향 &nbsp;|&nbsp; 생성: {datetime.now().strftime('%Y년 %m월 %d일 %H:%M')} &nbsp;|&nbsp; 수집 기사: {len(articles)}건</p>
+    <p>Wire Rope · Fiber Rope &nbsp;|&nbsp; 생성: {datetime.now().strftime('%Y년 %m월 %d일 %H:%M')} &nbsp;|&nbsp; 전체 {len(articles)}건 (업계 {len(dsr_articles)} · 경쟁사 {len(comp_articles)})</p>
   </header>
 
-  <div class="toolbar">
-    {stats_html if stats_html else '<span style="color:#aaa">수집된 기사 없음</span>'}
-    <span class="progress show" id="progress"><span class="spinner"></span> <span id="progressText">한국어로 번역 중...</span></span>
-    <button class="translate-btn" id="translateBtn" onclick="translateAll()" style="display:none">
-      다시 번역
-    </button>
+  <!-- 탭 바 -->
+  <div class="tab-bar">
+    <div class="tab active" id="tab-dsr" onclick="switchTab('dsr')">
+      업계 동향 <span class="tab-count">{len(dsr_articles)}</span>
+    </div>
+    <div class="tab comp" id="tab-comp" onclick="switchTab('comp')">
+      경쟁사 동향 <span class="tab-count">{len(comp_articles)}</span>
+    </div>
+    <div class="tab-translate">
+      <span class="progress show" id="progress"><span class="spinner"></span><span id="progressText">번역 중...</span></span>
+      <button class="translate-btn" id="translateBtn" onclick="translateAll()" style="display:none">번역 완료</button>
+    </div>
   </div>
 
-  <div class="container">
-    {sections_html}
+  <!-- 업계 탭 -->
+  <div class="tab-panel active" id="panel-dsr">
+    <div class="badge-bar">{dsr_badges}</div>
+    <div class="container">{dsr_sections}</div>
+  </div>
+
+  <!-- 경쟁사 탭 -->
+  <div class="tab-panel" id="panel-comp">
+    <div class="badge-bar">{comp_badges}</div>
+    <div class="container">{comp_sections}</div>
   </div>
 
   <footer>DSR 업계 동향 수집기 &nbsp;|&nbsp; 출처: Offshore Energy · Hellenic Shipping News · Maritime Executive · Rigzone · Port Technology · Mining.com</footer>
@@ -330,6 +427,13 @@ def build_html(articles: list[dict], output_dir: Path) -> Path:
         el.classList.add('ko-text');
       }}
     }});
+  }}
+
+  function switchTab(name) {{
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.add('active');
+    document.getElementById('panel-' + name).classList.add('active');
   }}
 
   function hideOverlay() {{
