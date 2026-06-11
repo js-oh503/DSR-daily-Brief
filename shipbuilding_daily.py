@@ -23,6 +23,10 @@ RSS_FEEDS = [
     # 오프쇼어·에너지 산업
     {"name": "Rigzone",                 "url": "https://www.rigzone.com/news/rss/rigzone_latest.aspx"},
     {"name": "Upstream Online",         "url": "https://www.upstreamonline.com/rss"},
+    # 해상풍력 전문
+    {"name": "4C Offshore",             "url": "https://www.4coffshore.com/rss/news.xml"},
+    {"name": "Recharge News",           "url": "https://www.rechargenews.com/rss"},
+    {"name": "Wind Energy Update",      "url": "https://www.windenergyupdate.com/rss.xml"},
     # 항만·크레인 (하역 장비 수요처)
     {"name": "Port Technology",         "url": "https://www.porttechnology.org/feed/"},
     # 광산·중공업 (산업용 와이어로프 수요처)
@@ -69,16 +73,28 @@ CATEGORIES = {
         "hoist", "winch", "capstan", "drawworks",
         "load line", "running rigging", "standing rigging",
     ],
+    "🌬️ 해상풍력": [
+        "offshore wind", "offshore wind farm", "offshore wind turbine",
+        "floating wind", "floating offshore wind", "FOWT",
+        "wind turbine installation", "wind turbine cable", "wind turbine mooring",
+        "wind farm mooring", "inter-array cable", "export cable",
+        "monopile", "jacket foundation", "wind installation vessel",
+        "dynamic cable", "wind energy", "offshore wind project",
+        "wind park", "OWF", "HVDC offshore",
+    ],
     "🛢️ 오프쇼어·에너지": [
         "offshore", "FPSO", "semi-submersible", "drillship", "jack-up",
         "deepwater", "subsea", "umbilical", "riser",
         "oil rig", "platform", "floating production",
-        "offshore wind", "wind turbine installation",
     ],
     "⛏️ 광산·산업": [
         "mining", "mine hoist", "shaft", "dragline",
-        "conveyor belt", "aerial ropeway", "tramway",
-        "elevator", "escalator", "bridge cable", "suspension bridge",
+        "conveyor belt", "bridge cable", "suspension bridge",
+        "elevator", "escalator",
+        # 로프웨이
+        "ropeway", "aerial ropeway", "tramway", "gondola lift",
+        "cable car", "chairlift", "funicular", "aerial tramway",
+        "material ropeway", "ore ropeway", "ski lift",
     ],
     "📊 시장·원자재": [
         "steel wire market", "rope market", "wire rod", "high carbon steel",
@@ -242,8 +258,8 @@ def fetch_articles(hours: int = 24) -> list[dict]:
 # ──────────────────────────────────────────────
 _CAT_SCORE = {
     "DSR 자사": 10, "와이어로프": 5, "섬유로프": 5,
-    "계류":     4,  "크레인":   3,  "오프쇼어": 3,
-    "광산":     3,  "시장":     2,  "규정":     1,
+    "계류":     4,  "해상풍력":  4,  "크레인":   3,
+    "오프쇼어": 3,  "광산":     3,  "시장":     2,  "규정": 1,
 }
 
 def score_article(a: dict) -> int:
@@ -262,6 +278,8 @@ def dsr_relevance(a: dict) -> str:
         return "DSR 주력 제품인 와이어로프·강선 시장과 직접 연관"
     if "섬유로프" in cat:
         return "DSR 섬유로프(SuperMax 등) 제품군 시장·기술 동향과 연관"
+    if "해상풍력" in cat:
+        return "해상풍력 설치·계류는 DSR 와이어로프·섬유로프(FOWT 계류·앵커)·강선의 핵심 신성장 시장"
     if "계류" in cat:
         return "계류 로프·앵커링 시스템 주요 수요처 동향 — 납품 시장에 영향"
     if "크레인" in cat:
@@ -294,6 +312,9 @@ def action_recommendation(a: dict) -> str:
     if "섬유로프" in cat:
         if pos:  return "🟢 기회 — 섬유로프 영업팀 리드 확인, 수주 가능성 검토"
         return "📌 모니터링 — 섬유로프 사업부 공유 및 시장 동향 파악"
+    if "해상풍력" in cat:
+        if pos:  return "🟢 기회 — FOWT 계류·앵커링·설치선 와이어 납품 기회 검토, 프로젝트 리스트 확인"
+        return "📌 모니터링 — 해상풍력 프로젝트 동향 파악, 영업·기획팀 공유"
     if "계류" in cat:
         if pos:  return "🟢 기회 — 프로젝트 수주 가능성 검토, 영업팀 즉시 공유"
         return "📌 모니터링 — 계류 관련 영업팀 공유, 납품 기회 탐색"
