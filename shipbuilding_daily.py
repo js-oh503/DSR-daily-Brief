@@ -298,7 +298,7 @@ def build_html(articles: list[dict], output_dir: Path) -> Path:
   <footer>DSR 업계 동향 수집기 &nbsp;|&nbsp; 출처: Offshore Energy · Hellenic Shipping News · Maritime Executive · Rigzone · Port Technology · Mining.com</footer>
 
   <script>
-  const STORAGE_KEY = 'shipnews_ko_{datetime.now().strftime("%Y%m%d")}';
+  const STORAGE_KEY = 'dsr_ko_{datetime.now().strftime("%Y%m%d")}';
 
   async function translateText(text) {{
     if (!text || !text.trim()) return text;
@@ -342,12 +342,20 @@ def build_html(articles: list[dict], output_dir: Path) -> Path:
     try {{
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {{
-        applyTranslations(JSON.parse(saved));
-        hideOverlay();
-        document.getElementById('progress').classList.remove('show');
-        document.getElementById('translateBtn').style.display = 'flex';
-        document.getElementById('translateBtn').disabled = true;
-        document.getElementById('translateBtn').textContent = '번역 완료';
+        const cache = JSON.parse(saved);
+        applyTranslations(cache);
+        // 캐시 항목이 실제로 적용됐는지 확인 (키 불일치 시 재번역)
+        const translated = document.querySelectorAll('.ko-text').length;
+        if (translated === 0) {{
+          localStorage.removeItem(STORAGE_KEY);
+          translateAll();
+        }} else {{
+          hideOverlay();
+          document.getElementById('progress').classList.remove('show');
+          document.getElementById('translateBtn').style.display = 'flex';
+          document.getElementById('translateBtn').disabled = true;
+          document.getElementById('translateBtn').textContent = '번역 완료';
+        }}
       }} else {{
         translateAll();
       }}
