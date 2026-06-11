@@ -34,11 +34,22 @@ RSS_FEEDS = [
 # DSR 핵심 카테고리별 키워드
 # ──────────────────────────────────────────────
 CATEGORIES = {
+    "🏷️ DSR 자사 제품": [
+        # 섬유로프 브랜드
+        "SuperMax", "Super Max",
+        # 강선로프 브랜드
+        "PowerMax", "Power Max", "Power Rope", "SAS rope", "Powerflex",
+        # 경강선 제품
+        "OT Wire", "IT Wire", "Sprex", "Hirex",
+        # 법인명
+        "DSR Wire", "DSR Corp", "DSR Vina", "DSR제강", "DSR주식회사",
+    ],
     "🪢 와이어로프·강선": [
         "wire rope", "steel wire rope", "wire strand", "wire cable",
         "hoist rope", "crane rope", "guy wire", "guy rope",
         "mining rope", "elevator rope", "lift rope",
         "WireCo", "Bridon", "Bekaert", "Casar", "Usha Martin",
+        "wire rod", "high carbon wire", "spring wire", "piano wire",
     ],
     "🧵 섬유로프·합성로프": [
         "fiber rope", "fibre rope", "synthetic rope", "HMPE", "UHMWPE",
@@ -89,19 +100,21 @@ ALL_KEYWORDS = [kw for kws in CATEGORIES.values() for kw in kws]
 # ──────────────────────────────────────────────
 COMPETITOR_KEYWORDS = [
     # 고려제강 / Kiswire
-    "Kiswire", "고려제강", "Koryо Wire",
+    "Kiswire", "고려제강", "Koryo Wire",
     # 글로벌 직접 경쟁사
     "Bridon-Bekaert", "Bridon", "Bekaert",
     "WireCo", "WireCo World",
     "Usha Martin",
-    "Tokyo Rope",
+    "Tokyo Rope", "Tokyo Seiko",
     "Teufelberger",
     "Pfeifer", "Drako",
-    "Lankhorst",
-    "Samson Rope",
-    "Cortland Cable",
+    "Lankhorst", "Lankhorst Euronete",
+    "Samson Rope", "Samson Corporation",
+    "Cortland Cable", "Cortland Limited",
     "Fasten Group", "Langshan",
-    "Juli Sling",
+    "Juli Sling", "Juli Group",
+    "Casar", "Gustav Wolf",
+    "Redaelli", "Trefileurope",
 ]
 
 COMPETITOR_CATEGORIES = {
