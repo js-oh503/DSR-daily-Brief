@@ -429,10 +429,33 @@ def make_top5_html(dsr_articles: list[dict]) -> str:
     </div>"""
 
 
+# 업계 동향 탭 섹션 표시 순서
+SECTION_ORDER = [
+    "🚢 조선·조선소",
+    "🌬️ 해상풍력",
+    "🛢️ 오프쇼어·에너지",
+    "⛏️ 광산·산업",
+    "📋 규정·인증",
+    "⚓ 계류·앵커링",
+    "🏗️ 크레인·리프팅",
+    "🪢 와이어로프·강선",
+    "🧵 섬유로프·합성로프",
+    "📊 시장·원자재",
+    "🏷️ DSR 자사 제품",
+]
+
+
+def _ordered_cats(grouped: dict, order: list) -> list:
+    ordered = [c for c in order if c in grouped]
+    rest    = [c for c in sorted(grouped.keys()) if c not in order]
+    return ordered + rest
+
+
 def make_sections(grouped: dict, is_comp: bool = False) -> str:
     comp_cls = " comp" if is_comp else ""
     html = ""
-    for cat in sorted(grouped.keys()):
+    cats = _ordered_cats(grouped, SECTION_ORDER) if not is_comp else sorted(grouped.keys())
+    for cat in cats:
         items = grouped[cat]
         icon = cat.split()[0] if cat else ""
         name = cat[len(icon):].strip() if icon else cat
@@ -801,36 +824,56 @@ def build_html(articles: list[dict], output_dir: Path) -> Path:
   }});
 
   async function translateAll() {{
-    const progress = document.getElementById('progress');
+    const progress    = document.getElementById('progress');
     const progressText = document.getElementById('progressText');
+    const ovp          = document.getElementById('ov-progress');
     progress.style.display = 'flex';
 
-    const titles = document.querySelectorAll('.card-title');
-    const bodies = document.querySelectorAll('.card-body');
+    const titles = [...document.querySelectorAll('.card-title')];
+    const bodies = [...document.querySelectorAll('.card-body')];
     const total  = titles.length + bodies.length;
     let done = 0;
     const cache = {{}};
 
-    async function doItem(el, isLink) {{
-      const original = el.getAttribute('data-orig') || el.innerText;
-      el.setAttribute('data-orig', original);
-      const translated = await translateText(original);
-      cache[original] = translated;
-      if (isLink) {{
-        const tn = [...el.childNodes].find(n => n.nodeType === Node.TEXT_NODE);
-        if (tn) tn.textContent = translated;
-        else el.insertBefore(document.createTextNode(translated), el.firstChild);
-      }} else {{ el.textContent = translated; }}
-      el.classList.add('ko-text');
-      done++;
-      progressText.textContent = `번역 중... (${{done}}/${{total}})`;
-      const ovp = document.getElementById('ov-progress');
-      if (ovp) ovp.textContent = `${{done}} / ${{total}} 번역 완료`;
-      await new Promise(r => setTimeout(r, 80));
+    // 중복 텍스트 제거 후 한 번만 번역 (속도 향상)
+    const uniqueTexts = new Map();
+    [...titles, ...bodies].forEach(el => {{
+      const t = el.innerText.trim();
+      if (t && !uniqueTexts.has(t)) uniqueTexts.set(t, null);
+    }});
+
+    // 병렬 번역 (5개씩 묶어서)
+    const entries = [...uniqueTexts.keys()];
+    const CHUNK = 5;
+    for (let i = 0; i < entries.length; i += CHUNK) {{
+      const chunk = entries.slice(i, i + CHUNK);
+      await Promise.all(chunk.map(async text => {{
+        const ko = await translateText(text);
+        uniqueTexts.set(text, ko);
+        cache[text] = ko;
+        done++;
+        progressText.textContent = `번역 중... (${{done}}/${{entries.length}})`;
+        if (ovp) ovp.textContent = `${{done}} / ${{entries.length}} 번역 완료`;
+      }}));
     }}
 
-    for (const el of titles) await doItem(el, true);
-    for (const el of bodies) await doItem(el, false);
+    // 번역 결과 적용
+    titles.forEach(el => {{
+      const orig = el.innerText.trim();
+      el.setAttribute('data-orig', orig);
+      const ko = uniqueTexts.get(orig);
+      if (ko) {{
+        const tn = [...el.childNodes].find(n => n.nodeType === Node.TEXT_NODE);
+        if (tn) tn.textContent = ko; else el.insertBefore(document.createTextNode(ko), el.firstChild);
+        el.classList.add('ko-text');
+      }}
+    }});
+    bodies.forEach(el => {{
+      const orig = el.innerText.trim();
+      el.setAttribute('data-orig', orig);
+      const ko = uniqueTexts.get(orig);
+      if (ko) {{ el.textContent = ko; el.classList.add('ko-text'); }}
+    }});
 
     try {{ localStorage.setItem(STORAGE_KEY, JSON.stringify(cache)); }} catch(e) {{}}
     hideOverlay();
