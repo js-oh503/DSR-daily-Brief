@@ -12,7 +12,7 @@
 | Python 실행 경로 | `C:\Users\Admin\AppData\Local\Programs\Python\Python313\python.exe` |
 | 작업 디렉터리 | `C:\Users\Admin\Desktop\workspace` |
 | Shell | PowerShell (Windows 11) |
-| GitHub 리포 | `js-oh503/ai-test` (branch: `master`) |
+| GitHub 리포 | `DSR-family/daily-brief` (branch: `master`) |
 
 ---
 
