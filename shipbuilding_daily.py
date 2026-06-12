@@ -386,7 +386,9 @@ def score_article(a: dict) -> int:
 
 
 def dsr_relevance(a: dict) -> str:
-    cat = a["category"]
+    cat  = a["category"]
+    text = (a["title"] + " " + a["summary"]).lower()
+
     if "DSR 자사" in cat:
         return "자사 제품이 직접 언급된 기사 — 즉시 내용 확인 필요"
     if "와이어로프" in cat:
@@ -394,20 +396,46 @@ def dsr_relevance(a: dict) -> str:
     if "섬유로프" in cat:
         return "DSR 섬유로프(SuperMax 등) 제품군 시장·기술 동향과 연관"
     if "조선" in cat:
+        if any(w in text for w in ["ammonia","hydrogen","dual fuel","lng","green","eco","zero emission","친환경","암모니아","수소"]):
+            return "친환경 선박 건조 수요 증가 → DSR 의장 로프·계류 납품 확대 기회"
+        if any(w in text for w in ["fire","accident","incident","collision","explosion","화재","사고","충돌"]):
+            return "해상 사고 → 선박 안전·계류 장비 점검 수요 주목"
+        if any(w in text for w in ["sanction","ban","restriction","제재","금지"]):
+            return "해운 규제 리스크 → 조선 수주 변동 모니터링 필요"
+        if any(w in text for w in ["battery","hybrid","electric","배터리","전기"]):
+            return "선박 전기화 트렌드 → 건조·의장 단계 DSR 제품 수요 지속"
+        if any(w in text for w in ["canal","route","tanker","vlcc","freight","운하","항로","유조선"]):
+            return "유조선·물류 동향 — 조선 발주 수요 간접 지표"
         return "조선소는 DSR 크레인 와이어로프·계류 로프·리깅 등 선박 건조·의장 단계의 주요 수요처"
     if "해상풍력" in cat:
+        if any(w in text for w in ["floating","fowt","부유식"]):
+            return "부유식 해상풍력(FOWT) 계류·앵커 → DSR 섬유로프·와이어로프 핵심 수요처"
+        if any(w in text for w in ["install","cable","foundation","monopile","설치","케이블"]):
+            return "해상풍력 설치·케이블링 → 설치선 와이어로프·크레인 로프 수요"
         return "해상풍력 설치·계류는 DSR 와이어로프·섬유로프(FOWT 계류·앵커)·강선의 핵심 신성장 시장"
     if "계류" in cat:
         return "계류 로프·앵커링 시스템 주요 수요처 동향 — 납품 시장에 영향"
     if "크레인" in cat:
         return "크레인용 와이어로프 수요처 동향 — 산업 수요 예측에 활용"
     if "오프쇼어" in cat:
+        if any(w in text for w in ["discovery","field","exploration","drill","탐사","발견","시추"]):
+            return "오일·가스 신규 개발·탐사 → 계류·드릴링 로프 수요 발생 예상"
+        if any(w in text for w in ["acquisition","merger","m&a","인수","합병"]):
+            return "오프쇼어 업계 재편 → 주요 수요처 구조 변화 모니터링"
+        if any(w in text for w in ["subsea","inspection","rov","drone","해저","검사"]):
+            return "해저 검사·유지보수 시장 → 언더워터 와이어·케이블 수요"
         return "오프쇼어 산업은 DSR 계류·앵커링·드릴링 로프의 핵심 수요처"
     if "광산" in cat:
+        if any(w in text for w in ["hoist","shaft","dragline","호이스트","샤프트"]):
+            return "광산 호이스트·샤프트 설비 → DSR 광산용 와이어로프 직접 수요처"
+        if any(w in text for w in ["automation","electric","autonomous","자동화","전동","자율"]):
+            return "광산 자동화·전기화 트렌드 → 장비 수요 구조 변화 모니터링"
         return "광산용 와이어로프(샤프트 로프·드래그라인 등) 수요처 동향"
     if "시장" in cat:
         return "원자재(와이어 로드·폴리에스터) 가격 변동 — DSR 생산 원가에 직접 영향"
     if "규정" in cat:
+        if any(w in text for w in ["hydrogen","fuel cell","ai","design","수소","연료전지","ai","설계"]):
+            return "선박 기술 혁신·인증 동향 → DSR 납품 요건 변화 가능성 주시"
         return "로프 국제 규정·인증 변경 — 제품 품질 기준·납품 요건에 영향"
     return "와이어로프·섬유로프 업계 동향으로 DSR 사업 전반과 연관"
 
