@@ -1,4 +1,4 @@
-"""
+﻿"""
 DSR 일일 업계 동향 자동 수집 프로그램 (무료 버전)
 강선 로프·섬유 로프 관련 해양·오프쇼어·크레인·광산 뉴스를 수집해 HTML 보고서를 생성합니다.
 Claude API 없이 동작합니다.
@@ -513,10 +513,10 @@ def _card_html(a: dict, rank: int = 0, is_comp: bool = False) -> str:
     rel        = dsr_relevance(a)
     act        = action_recommendation(a)
     domain     = _domain(a["link"])
-    comp_insights = f"""
-        <div class="insight-row">
-          <div class="insight act"><span class="ilabel">대응 방안</span><span class="itext">{act}</span></div>
-        </div>""" if not is_comp else ""
+    if is_comp:
+        insights_html = f'<div class="card-insights single"><div class="insight rel"><span class="ilabel">DSR 연관</span><span class="itext">{rel}</span></div></div>'
+    else:
+        insights_html = f'<div class="card-insights"><div class="insight rel"><span class="ilabel">DSR 연관</span><span class="itext">{rel}</span></div><div class="insight act"><span class="ilabel">대응 방안</span><span class="itext">{act}</span></div></div>'
     return f"""
     <div class="card{comp_cls}">
       <div class="card-top">
@@ -528,11 +528,7 @@ def _card_html(a: dict, rank: int = 0, is_comp: bool = False) -> str:
       </div>
       <a class="card-title" href="{a['link']}" target="_blank">{a['title']}</a>
       <div class="card-body">{a['summary']}</div>
-      <div class="card-insights">
-        <div class="insight-row">
-          <div class="insight rel"><span class="ilabel">DSR 연관</span><span class="itext">{rel}</span></div>
-        </div>{comp_insights}
-      </div>
+      {insights_html}
       <div class="card-source-row">
         <span class="src-label">출처</span>
         <a class="src-link" href="{a['link']}" target="_blank">{domain}</a>
@@ -667,67 +663,57 @@ def build_html(articles: list[dict], output_dir: Path) -> Path:
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
   <style>
     :root {{
-      --blue:      #1565C0;
-      --blue-lt:   #E3F0FF;
-      --blue-dk:   #0D3F7A;
-      --red:       #B71C1C;
-      --red-lt:    #FFEBEE;
-      --gold:      #F57F17;
-      --gold-lt:   #FFF8E1;
-      --green:     #2E7D32;
-      --green-lt:  #E8F5E9;
-      --gray-bg:   #F4F6FA;
-      --gray-bdr:  #DDE2EE;
+      --navy:      #1A2744;
+      --blue:      #2563EB;
+      --blue-lt:   #EFF6FF;
+      --red:       #DC2626;
+      --red-lt:    #FEF2F2;
+      --gray-bg:   #F8F9FB;
+      --gray-bdr:  #E5E7EB;
       --gray-text: #6B7280;
       --white:     #FFFFFF;
-      --text:      #1A1F2E;
+      --text:      #111827;
     }}
     * {{ box-sizing: border-box; margin: 0; padding: 0; }}
     body {{ font-family: 'Inter', 'Noto Sans KR', 'Malgun Gothic', sans-serif;
             background: var(--gray-bg); color: var(--text); min-height: 100vh; }}
 
-    @keyframes spin {{ to {{ transform: rotate(360deg); }} }}
-
     /* ── 상단 바 ── */
     .topbar {{
-      background: linear-gradient(100deg, #0D3F7A 0%, #1565C0 60%, #1976D2 100%);
-      padding: 0 40px;
+      background: var(--navy);
+      padding: 0 32px;
       display: flex; align-items: center; justify-content: space-between;
-      height: 64px; position: sticky; top: 0; z-index: 100;
-      box-shadow: 0 2px 12px rgba(13,63,122,.35);
+      height: 56px; position: sticky; top: 0; z-index: 100;
     }}
-    .topbar-left {{ display: flex; align-items: center; gap: 14px; }}
-    .topbar-logo {{ width: 36px; height: 36px; background: rgba(255,255,255,.18);
-                    border-radius: 9px; display: flex; align-items: center; justify-content: center;
-                    font-weight: 800; font-size: 0.75rem; color: #fff; letter-spacing: 1px;
-                    border: 1.5px solid rgba(255,255,255,.3); }}
-    .topbar-title {{ color: #fff; font-size: 1.05rem; font-weight: 700; letter-spacing: -.3px; }}
-    .topbar-date  {{ color: rgba(255,255,255,.6); font-size: 0.8rem; }}
-    .topbar-right {{ display: flex; align-items: center; gap: 10px; }}
-    .stat-chip {{ background: rgba(255,255,255,.13); color: rgba(255,255,255,.92);
-                  border-radius: 20px; padding: 4px 14px; font-size: 0.78rem; font-weight: 500;
-                  border: 1px solid rgba(255,255,255,.18); }}
+    .topbar-left {{ display: flex; align-items: center; gap: 12px; }}
+    .topbar-logo {{ width: 32px; height: 32px; background: rgba(255,255,255,.15);
+                    border-radius: 6px; display: flex; align-items: center; justify-content: center;
+                    font-weight: 800; font-size: 0.68rem; color: #fff; letter-spacing: 1px; }}
+    .topbar-title {{ color: #fff; font-size: 0.95rem; font-weight: 600; }}
+    .topbar-date  {{ color: rgba(255,255,255,.5); font-size: 0.8rem; }}
+    .topbar-right {{ display: flex; align-items: center; gap: 8px; }}
+    .stat-chip {{ background: rgba(255,255,255,.1); color: rgba(255,255,255,.85);
+                  border-radius: 6px; padding: 3px 12px; font-size: 0.75rem; font-weight: 500; }}
     .stat-chip b {{ font-weight: 700; }}
 
     /* ── 탭 네비 ── */
     .tab-nav {{
       background: var(--white); border-bottom: 1px solid var(--gray-bdr);
       display: flex; align-items: stretch; padding: 0 32px;
-      position: sticky; top: 64px; z-index: 99;
-      box-shadow: 0 1px 4px rgba(0,0,0,.06);
+      position: sticky; top: 56px; z-index: 99;
     }}
     .tab {{
-      padding: 0 24px; height: 50px; font-size: 0.88rem; font-weight: 600;
-      cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -1px;
-      color: var(--gray-text); display: flex; align-items: center; gap: 8px;
-      transition: color .18s, border-color .18s; user-select: none; white-space: nowrap;
+      padding: 0 20px; height: 46px; font-size: 0.85rem; font-weight: 600;
+      cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
+      color: var(--gray-text); display: flex; align-items: center; gap: 7px;
+      transition: color .15s, border-color .15s; user-select: none;
     }}
     .tab:hover {{ color: var(--blue); }}
     .tab.active {{ color: var(--blue); border-bottom-color: var(--blue); }}
     .tab.comp:hover {{ color: var(--red); }}
     .tab.comp.active {{ color: var(--red); border-bottom-color: var(--red); }}
-    .tab-pill {{ font-size: 0.72rem; font-weight: 700; border-radius: 20px;
-                  padding: 2px 9px; background: var(--blue-lt); color: var(--blue); }}
+    .tab-pill {{ font-size: 0.7rem; font-weight: 700; border-radius: 20px;
+                  padding: 1px 8px; background: var(--blue-lt); color: var(--blue); }}
     .tab.comp .tab-pill {{ background: var(--red-lt); color: var(--red); }}
 
     /* ── 패널 ── */
@@ -737,134 +723,117 @@ def build_html(articles: list[dict], output_dir: Path) -> Path:
     /* ── 필터 바 ── */
     .filter-bar {{
       background: var(--white); border-bottom: 1px solid var(--gray-bdr);
-      padding: 10px 40px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+      padding: 8px 32px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
     }}
-    .filter-label {{ font-size: 0.72rem; font-weight: 700; color: var(--gray-text);
-                     text-transform: uppercase; letter-spacing: .6px; margin-right: 4px; }}
-    .chip {{ font-size: 0.75rem; font-weight: 600; border-radius: 20px;
-              padding: 4px 13px; background: var(--blue-lt); color: var(--blue);
-              transition: all .18s; cursor: pointer; user-select: none; }}
-    .chip:hover {{ background: var(--blue); color: #fff; transform: translateY(-1px);
-                   box-shadow: 0 2px 8px rgba(21,101,192,.25); }}
-    .chip:active {{ transform: translateY(0); }}
+    .filter-label {{ font-size: 0.7rem; font-weight: 600; color: var(--gray-text);
+                     letter-spacing: .4px; margin-right: 4px; }}
+    .chip {{ font-size: 0.72rem; font-weight: 600; border-radius: 6px;
+              padding: 3px 11px; background: var(--blue-lt); color: var(--blue);
+              transition: background .15s, color .15s; cursor: pointer; user-select: none; }}
+    .chip:hover {{ background: var(--blue); color: #fff; }}
     .chip.comp {{ background: var(--red-lt); color: var(--red); }}
-    .chip.comp:hover {{ background: var(--red); color: #fff;
-                        box-shadow: 0 2px 8px rgba(183,28,28,.25); }}
-    /* 클릭된 섹션 헤더 잠깐 강조 */
-    .section-header.highlight {{ animation: hl .8s ease; }}
+    .chip.comp:hover {{ background: var(--red); color: #fff; }}
+    .section-header.highlight {{ animation: hl .7s ease; }}
     @keyframes hl {{
-      0%   {{ background: rgba(21,101,192,.12); border-radius: 8px; }}
+      0%   {{ background: rgba(37,99,235,.08); border-radius: 6px; }}
       100% {{ background: transparent; }}
     }}
 
     /* ── 페이지 래퍼 ── */
-    .page {{ max-width: 1160px; margin: 0 auto; padding: 28px 24px 56px; }}
+    .page {{ max-width: 1100px; margin: 0 auto; padding: 28px 24px 60px; }}
 
     /* ── Top 5 섹션 ── */
-    .top5-section {{
-      background: linear-gradient(135deg, var(--gold-lt) 0%, #FFFDE7 100%);
-      border: 1.5px solid #FFE082; border-radius: 16px;
-      padding: 20px 24px 24px; margin-bottom: 36px;
-    }}
+    .top5-section {{ margin-bottom: 40px; }}
     .top5-header {{
-      display: flex; align-items: center; gap: 10px; margin-bottom: 18px;
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 16px; padding-bottom: 12px;
+      border-bottom: 2px solid var(--text);
     }}
-    .top5-icon {{ font-size: 1.3rem; }}
-    .top5-title {{ font-size: 1rem; font-weight: 700; color: var(--gold); }}
-    .top5-sub {{ font-size: 0.75rem; color: #A0522D; margin-left: 6px;
-                  background: rgba(245,127,23,.1); padding: 2px 10px; border-radius: 20px; }}
+    .top5-icon {{ font-size: 1.1rem; }}
+    .top5-title {{ font-size: 1rem; font-weight: 700; color: var(--text); }}
+    .top5-sub {{ font-size: 0.72rem; color: var(--gray-text); margin-left: 4px; }}
     .rank-badge {{
-      font-size: 0.72rem; font-weight: 800; color: var(--gold);
-      background: rgba(245,127,23,.12); border: 1px solid rgba(245,127,23,.3);
-      border-radius: 20px; padding: 2px 9px; white-space: nowrap;
+      font-size: 0.7rem; font-weight: 800; color: var(--white);
+      background: var(--navy); border-radius: 5px;
+      padding: 2px 8px; white-space: nowrap;
     }}
 
     /* ── 섹션 헤더 ── */
     .section-header {{
-      display: flex; align-items: center; gap: 10px;
-      margin: 36px 0 14px; padding-bottom: 10px;
-      border-bottom: 2px solid var(--blue-lt);
+      display: flex; align-items: center; gap: 8px;
+      margin: 40px 0 14px; padding-bottom: 10px;
+      border-bottom: 1px solid var(--gray-bdr);
     }}
-    .section-header.comp {{ border-bottom-color: var(--red-lt); }}
-    .section-icon {{ font-size: 1.1rem; }}
-    .section-name {{ font-size: 0.95rem; font-weight: 700; color: var(--blue-dk); }}
-    .section-header.comp .section-name {{ color: var(--red); }}
-    .section-cnt {{ margin-left: auto; font-size: 0.72rem; font-weight: 700;
-                     background: var(--blue); color: #fff; border-radius: 20px; padding: 2px 10px; }}
-    .section-header.comp .section-cnt {{ background: var(--red); }}
+    .section-icon {{ font-size: 1rem; }}
+    .section-name {{ font-size: 0.9rem; font-weight: 700; color: var(--text); }}
+    .section-cnt {{ margin-left: auto; font-size: 0.68rem; font-weight: 700;
+                     background: var(--blue-lt); color: var(--blue);
+                     border-radius: 20px; padding: 2px 9px; }}
+    .section-header.comp .section-cnt {{ background: var(--red-lt); color: var(--red); }}
 
     /* ── 카드 그리드 ── */
-    .grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; }}
+    .grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; }}
 
     .card {{
-      background: var(--white); border-radius: 12px; padding: 18px 20px 16px;
-      box-shadow: 0 1px 3px rgba(0,0,0,.06), 0 1px 8px rgba(0,0,0,.04);
-      transition: transform .15s, box-shadow .15s;
-      border-top: 3px solid transparent;
+      background: var(--white); border-radius: 8px; padding: 16px 18px;
+      border: 1px solid var(--gray-bdr);
+      transition: border-color .15s, box-shadow .15s;
       display: flex; flex-direction: column; gap: 0;
     }}
-    .card:hover {{ transform: translateY(-2px); box-shadow: 0 6px 22px rgba(21,101,192,.13);
-                   border-top-color: var(--blue); }}
-    .card.comp:hover {{ box-shadow: 0 6px 22px rgba(183,28,28,.11); border-top-color: var(--red); }}
+    .card:hover {{ border-color: var(--blue); box-shadow: 0 2px 12px rgba(37,99,235,.1); }}
+    .card.comp:hover {{ border-color: var(--red); box-shadow: 0 2px 12px rgba(220,38,38,.08); }}
 
-    .card-top {{ display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }}
-    .card-meta {{ display: flex; align-items: center; gap: 8px; }}
-    .card-src  {{ font-size: 0.68rem; font-weight: 700; color: var(--gray-text);
-                  text-transform: uppercase; letter-spacing: .5px; }}
-    .card-date {{ font-size: 0.68rem; color: #B0BEC5; }}
+    .card-top {{ display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; }}
+    .card-meta {{ display: flex; align-items: center; gap: 6px; }}
+    .card-src  {{ font-size: 0.65rem; font-weight: 700; color: var(--gray-text); letter-spacing: .3px; }}
+    .card-date {{ font-size: 0.65rem; color: #9CA3AF; }}
 
-    .card-title {{ display: block; font-size: 0.91rem; font-weight: 700; color: var(--blue);
-                   text-decoration: none; line-height: 1.55; margin-bottom: 8px; }}
-    .card.comp .card-title {{ color: var(--red); }}
-    .card-title:hover {{ text-decoration: underline; }}
+    .card-title {{ display: block; font-size: 0.88rem; font-weight: 700; color: var(--text);
+                   text-decoration: none; line-height: 1.5; margin-bottom: 8px; }}
+    .card-title:hover {{ color: var(--blue); }}
+    .card.comp .card-title:hover {{ color: var(--red); }}
 
-    .card-body {{ font-size: 0.81rem; color: #546E7A; line-height: 1.7; margin-bottom: 12px;
+    .card-body {{ font-size: 0.79rem; color: var(--gray-text); line-height: 1.65; margin-bottom: 12px;
                   display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
                   overflow: hidden; }}
-    .ko-text {{ color: var(--text) !important; }}
 
-    /* ── 인사이트 박스 ── */
-    .card-insights {{ border-top: 1px solid var(--gray-bdr); padding-top: 10px;
-                       display: flex; flex-direction: column; gap: 6px; }}
-    .insight-row {{ display: flex; flex-direction: column; gap: 6px; }}
-    .insight {{ display: flex; flex-direction: column; gap: 2px; padding: 7px 10px;
-                border-radius: 8px; }}
-    .insight.rel {{ background: var(--blue-lt); }}
-    .insight.act {{ background: var(--green-lt); }}
-    .card.comp .insight.rel {{ background: var(--red-lt); }}
-    .ilabel {{ font-size: 0.65rem; font-weight: 800; text-transform: uppercase;
-               letter-spacing: .6px; color: var(--gray-text); margin-bottom: 1px; }}
-    .insight.rel .ilabel {{ color: var(--blue); }}
-    .insight.act .ilabel {{ color: var(--green); }}
-    .card.comp .insight.rel .ilabel {{ color: var(--red); }}
-    .itext {{ font-size: 0.78rem; font-weight: 500; line-height: 1.5; color: var(--text); }}
+    /* ── 인사이트 박스 (2열) ── */
+    .card-insights {{
+      border-top: 1px solid var(--gray-bdr); padding-top: 10px;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+    }}
+    .card-insights.single {{ grid-template-columns: 1fr; }}
+    .insight {{ display: flex; flex-direction: column; gap: 3px; padding: 8px 10px;
+                border-radius: 6px; background: var(--gray-bg); }}
+    .insight.rel {{ border-left: 3px solid var(--blue); }}
+    .insight.act {{ border-left: 3px solid #10B981; }}
+    .card.comp .insight.rel {{ border-left-color: var(--red); }}
+    .ilabel {{ font-size: 0.62rem; font-weight: 700; letter-spacing: .4px;
+               color: var(--gray-text); text-transform: uppercase; }}
+    .itext {{ font-size: 0.76rem; font-weight: 500; line-height: 1.45; color: var(--text); }}
 
-    /* ── 카드 출처 행 ── */
+    /* ── 출처 ── */
     .card-source-row {{
-      display: flex; align-items: center; gap: 6px;
-      margin-top: 8px; padding-top: 8px;
-      border-top: 1px dashed var(--gray-bdr);
+      display: flex; align-items: center; gap: 5px;
+      margin-top: 10px; padding-top: 8px;
+      border-top: 1px solid var(--gray-bdr);
     }}
     .src-label {{
-      font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
-      letter-spacing: .5px; color: var(--gray-text);
-      background: var(--gray-bg); border-radius: 4px; padding: 1px 6px;
+      font-size: 0.62rem; font-weight: 600; color: var(--gray-text);
+      background: var(--gray-bg); border-radius: 3px; padding: 1px 5px;
     }}
-    .src-link {{
-      font-size: 0.72rem; color: var(--gray-text); text-decoration: none;
-      word-break: break-all;
-    }}
+    .src-link {{ font-size: 0.7rem; color: var(--gray-text); text-decoration: none; word-break: break-all; }}
     .src-link:hover {{ color: var(--blue); text-decoration: underline; }}
     .card.comp .src-link:hover {{ color: var(--red); }}
 
     /* ── 빈 상태 ── */
-    .empty {{ text-align: center; padding: 64px 20px; color: var(--gray-text); }}
-    .empty-icon {{ font-size: 2.5rem; margin-bottom: 12px; }}
-    .empty-text {{ font-size: 0.9rem; }}
+    .empty {{ text-align: center; padding: 60px 20px; color: var(--gray-text); }}
+    .empty-icon {{ font-size: 2rem; margin-bottom: 10px; }}
+    .empty-text {{ font-size: 0.85rem; }}
 
     /* ── 푸터 ── */
-    footer {{ text-align: center; padding: 20px; font-size: 0.72rem;
-              color: #B0BEC5; border-top: 1px solid var(--gray-bdr); background: var(--white); }}
+    footer {{ text-align: center; padding: 18px; font-size: 0.7rem;
+              color: #9CA3AF; border-top: 1px solid var(--gray-bdr); background: var(--white); }}
   </style>
 </head>
 <body>
