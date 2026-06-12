@@ -106,8 +106,8 @@ RSS_FEEDS = [
     # 항만·크레인 (하역 장비 수요처)
     {"name": "Port Technology",         "url": "https://www.porttechnology.org/feed/"},
     # 광산·중공업 (산업용 와이어로프 수요처)
-    {"name": "Mining.com",              "url": "https://www.mining.com/feed/"},
-    {"name": "International Mining",    "url": "https://im-mining.com/feed/"},
+    {"name": "Mining.com",              "url": "https://www.mining.com/feed/",   "default_cat": "⛏️ 광산·산업"},
+    {"name": "International Mining",    "url": "https://im-mining.com/feed/",    "default_cat": "⛏️ 광산·산업"},
 ]
 
 # ──────────────────────────────────────────────
@@ -323,7 +323,7 @@ def fetch_articles(hours: int = 24) -> list[dict]:
                         "summary":       summary,
                         "link":          link,
                         "published":     published.strftime("%Y-%m-%d %H:%M UTC") if published else "시각 불명",
-                        "category":      get_competitor_category(title, summary) if comp else get_category(title, summary),
+                        "category":      get_competitor_category(title, summary) if comp else (feed_info.get("default_cat") or get_category(title, summary)),
                         "is_competitor": comp,
                     })
                     count += 1
